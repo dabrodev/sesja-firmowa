@@ -73,6 +73,16 @@ export default function Home() {
       <main>
         {/* Hero Section */}
         <section className="relative flex min-h-[90vh] flex-col items-center justify-center overflow-hidden px-6 pt-20">
+          {/* Background Image with Overlay */}
+          <div className="absolute inset-0 -z-20">
+            <img
+              src="/hero-bg.png"
+              alt="Background"
+              className="h-full w-full object-cover opacity-40 grayscale-[0.2]"
+            />
+            <div className="absolute inset-0 bg-gradient-to-b from-[#020617]/80 via-[#020617]/40 to-[#020617]" />
+          </div>
+
           {/* Advanced Background Effects */}
           <div className="absolute top-1/4 left-1/2 -z-10 h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-600/20 blur-[130px] animate-pulse" />
           <div className="absolute bottom-1/4 right-1/4 -z-10 h-[400px] w-[400px] rounded-full bg-indigo-600/10 blur-[120px]" />
