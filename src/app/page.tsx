@@ -36,9 +36,9 @@ export default function Home() {
         <div className="container mx-auto flex h-16 items-center justify-between px-6">
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 shadow-lg shadow-blue-500/20">
-              <Sparkles className="h-5 w-5 text-white" />
+              <Camera className="h-5 w-5 text-white" />
             </div>
-            <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent italic">SesjaFirmowa.pl</span>
+            <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent">SesjaFirmowa.pl</span>
           </div>
 
           <NavigationMenu className="hidden md:flex">
@@ -71,31 +71,27 @@ export default function Home() {
       </header>
 
       <main>
-        {/* Hero Section */}
-        <section className="relative flex min-h-[90vh] flex-col items-center justify-center overflow-hidden px-6 pt-20">
-          {/* Background Image with Overlay */}
-          <div className="absolute inset-0 -z-20">
+        <section className="relative flex min-h-[100vh] flex-col items-center justify-center overflow-hidden px-6 pt-24">
+          {/* Background Image Layer */}
+          <div className="absolute inset-0 pointer-events-none">
             <img
-              src="/hero-bg.png"
-              alt="Background"
-              className="h-full w-full object-cover opacity-40 grayscale-[0.2]"
+              src="/hero-bg.png?v=2"
+              alt="Premium Office Background"
+              className="h-full w-full object-cover scale-105 animate-slow-zoom"
             />
-            <div className="absolute inset-0 bg-gradient-to-b from-[#020617]/80 via-[#020617]/40 to-[#020617]" />
+            <div className="absolute inset-0 bg-[#020617]/70 backdrop-blur-[2px]" />
+            <div className="absolute inset-0 bg-gradient-to-b from-[#020617]/20 via-transparent to-[#020617]" />
           </div>
 
-          {/* Advanced Background Effects */}
-          <div className="absolute top-1/4 left-1/2 -z-10 h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-600/20 blur-[130px] animate-pulse" />
-          <div className="absolute bottom-1/4 right-1/4 -z-10 h-[400px] w-[400px] rounded-full bg-indigo-600/10 blur-[120px]" />
-
           <motion.div
-            className="text-center"
+            className="relative z-10 text-center"
             initial="initial"
             animate="animate"
             variants={staggerContainer}
           >
             <motion.div
               variants={fadeInUp}
-              className="mb-8 inline-flex items-center gap-2 rounded-full border border-blue-500/20 bg-blue-500/5 px-5 py-2 text-xs font-bold uppercase tracking-widest text-blue-400"
+              className="mb-8 inline-flex items-center gap-2 rounded-full border border-blue-500/20 bg-blue-500/10 px-5 py-2 text-xs font-bold uppercase tracking-widest text-blue-400"
             >
               <Zap className="h-3.5 w-3.5" />
               <span>Rewolucja w Twoim Wizerunku</span>
@@ -105,16 +101,16 @@ export default function Home() {
               variants={fadeInUp}
               className="mb-8 max-w-5xl bg-gradient-to-b from-white via-white to-white/40 bg-clip-text text-5xl font-extrabold tracking-tight text-transparent md:text-7xl lg:text-8xl leading-[1.1]"
             >
-              Profesjonalna sesja. <br />
+              Profesjonalna sesja firmowa. <br />
               <span className="text-blue-500">Bez fotografa.</span>
             </motion.h1>
 
             <motion.p
               variants={fadeInUp}
-              className="mx-auto mb-12 max-w-2xl text-lg text-white/50 md:text-xl leading-relaxed"
+              className="mx-auto mb-12 max-w-2xl text-lg text-white/70 md:text-xl leading-relaxed"
             >
-              Profesjonalne zdjęcia dla adwokatów, designerów i agentów nieruchomości.
-              Zmień kilka selfie w sesję w swoim biurze lub studio, bez stresu i zbędnych kosztów.
+              Twoja nowa profesjonalna sesja biznesowa i wizerunkowa w kilka minut.
+              Zmień kilka selfie w sesję firmową w swoim biurze lub studio, bez stresu i zbędnych kosztów.
             </motion.p>
 
             <motion.div variants={fadeInUp} className="flex flex-col items-center justify-center gap-6 sm:flex-row">
@@ -124,7 +120,7 @@ export default function Home() {
                 </Button>
               </Link>
               <Button size="lg" variant="outline" className="h-14 border-white/10 bg-white/5 px-10 text-lg text-white hover:bg-white/10 transition-all">
-                Zobacz Przybiady
+                Zobacz Przykłady
               </Button>
             </motion.div>
           </motion.div>
@@ -192,7 +188,7 @@ export default function Home() {
                     <div className="h-6 w-6 rounded-full bg-blue-600/20 flex items-center justify-center flex-shrink-0 mt-1">
                       <div className="h-2 w-2 rounded-full bg-blue-500" />
                     </div>
-                    <p><strong className="text-white">Gotowe w minuty:</strong> Otrzymasz profesjonalną sesję biznesową, gotową do publikacji na LinkedIn czy stronie WWW.</p>
+                    <p><strong className="text-white">Gotowe w minuty:</strong> Otrzymasz profesjonalną sesję wizerunkową, gotową do publikacji na LinkedIn, stronie WWW czy w ofertach biznesowych.</p>
                   </div>
                 </div>
                 <Link href="/generator">
@@ -236,8 +232,8 @@ export default function Home() {
         <section className="py-24 px-6 bg-black/20">
           <div className="container mx-auto">
             <div className="mb-16 text-center">
-              <h2 className="text-3xl font-bold text-white md:text-5xl">Zobacz co potrafi nasz system</h2>
-              <p className="mt-4 text-white/40 text-lg">Profesjonalne sesje dopasowane do Twojej branży i stylu pracy.</p>
+              <h2 className="text-3xl font-bold text-white md:text-5xl">Sesja firmowa z AI — zobacz efekty</h2>
+              <p className="mt-4 text-white/40 text-lg">Profesjonalna sesja biznesowa stworzona specjalnie dla Twojej marki.</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-7xl mx-auto">
@@ -280,9 +276,9 @@ export default function Home() {
         <div className="container mx-auto flex flex-col md:flex-row items-center justify-between gap-10">
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600/20">
-              <Sparkles className="h-4 w-4 text-blue-400" />
+              <Camera className="h-4 w-4 text-blue-400" />
             </div>
-            <span className="text-lg font-bold tracking-tight text-white/90 italic">SesjaFirmowa.pl</span>
+            <span className="text-lg font-bold tracking-tight text-white/90">SesjaFirmowa.pl</span>
           </div>
           <div className="flex gap-8 text-white/30 text-sm font-medium">
             <a href="#" className="hover:text-blue-400 transition-colors">Regulamin</a>
