@@ -1,7 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GetObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { r2Client } from "@/lib/r2";
 
 export async function POST(req: NextRequest) {
     try {
@@ -17,7 +14,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Worker URL not configured" }, { status: 500 });
         }
 
-        // 1. Upload via Worker R2 binding (EU jurisdiction, native access)
+        // Upload via Worker R2 binding (EU jurisdiction, native access — no S3 creds needed)
         const workerForm = new FormData();
         workerForm.append("file", file);
 
@@ -34,16 +31,8 @@ export async function POST(req: NextRequest) {
 
         const { key } = await workerResp.json() as { key: string };
 
-        // 2. Generate signed GET URL from S3 EU credentials (read-only is enough for GET)
-        //    This URL is accessible both from the browser and from the Worker during generation
-        const viewUrl = await getSignedUrl(
-            r2Client,
-            new GetObjectCommand({
-                Bucket: process.env.R2_BUCKET_NAME!,
-                Key: key,
-            }),
-            { expiresIn: 86400 } // 24h
-        );
+        // Use Worker's /file endpoint for all access — same R2 EU binding
+        const viewUrl = `${workerUrl}/file?key=${encodeURIComponent(key)}`;
 
         return NextResponse.json({ viewUrl, key });
 
