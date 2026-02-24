@@ -13,8 +13,8 @@ export interface Env {
 interface GenerateRequest {
     sessionId: string;
     uid: string;
-    faceUrls: string[];    // Signed R2 URLs for face reference photos
-    officeUrls: string[];  // Signed R2 URLs for office/background photos
+    faceKeys: string[];    // R2 object keys for face reference photos
+    officeKeys: string[];  // R2 object keys for office/background photos
 }
 
 const CORS_HEADERS = {
@@ -80,9 +80,9 @@ export default {
 
         try {
             const body = await request.json() as GenerateRequest;
-            const { sessionId, uid, faceUrls, officeUrls } = body;
+            const { sessionId, uid, faceKeys, officeKeys } = body;
 
-            if (!sessionId || !uid || !faceUrls?.length || !officeUrls?.length) {
+            if (!sessionId || !uid || !faceKeys?.length || !officeKeys?.length) {
                 return new Response(
                     JSON.stringify({ error: "Missing required fields" }),
                     { status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
@@ -90,12 +90,12 @@ export default {
             }
 
             console.log(`[${sessionId}] Starting generation for user ${uid}`);
-            console.log(`[${sessionId}] Face refs: ${faceUrls.length}, Office refs: ${officeUrls.length}`);
+            console.log(`[${sessionId}] Face refs: ${faceKeys.length}, Office refs: ${officeKeys.length}`);
 
-            // Step 1: Fetch all reference images and convert to base64
+            // Step 1: Fetch images directly from R2 binding (no HTTP — avoids self-referential calls)
             const [faceBase64Array, officeBase64Array] = await Promise.all([
-                fetchImagesToBase64(faceUrls.slice(0, 4)), // Max 4 face refs
-                fetchImagesToBase64(officeUrls.slice(0, 2)), // Max 2 office refs
+                fetchImagesFromR2(env, faceKeys.slice(0, 4)),
+                fetchImagesFromR2(env, officeKeys.slice(0, 2)),
             ]);
 
             console.log(`[${sessionId}] Images fetched successfully`);
@@ -167,16 +167,16 @@ async function handleUpload(request: Request, env: Env): Promise<Response> {
     }
 }
 
-// ─── Helper: Fetch images and convert to base64 ──────────────────────────────
+// ─── Helper: Fetch images directly from R2 binding (no HTTP) ────────────────
 
-async function fetchImagesToBase64(urls: string[]): Promise<{ base64: string; mimeType: string }[]> {
+async function fetchImagesFromR2(env: Env, keys: string[]): Promise<{ base64: string; mimeType: string }[]> {
     const results = await Promise.all(
-        urls.map(async (url) => {
-            const resp = await fetch(url);
-            if (!resp.ok) throw new Error(`Failed to fetch image: ${url} (${resp.status})`);
-            const buffer = await resp.arrayBuffer();
+        keys.map(async (key) => {
+            const object = await env.MEDIA_BUCKET.get(key);
+            if (!object) throw new Error(`R2 object not found: ${key}`);
+            const buffer = await object.arrayBuffer();
             const base64 = arrayBufferToBase64(buffer);
-            const mimeType = resp.headers.get("content-type") || "image/jpeg";
+            const mimeType = object.httpMetadata?.contentType || "image/jpeg";
             return { base64, mimeType: mimeType.split(";")[0] };
         })
     );

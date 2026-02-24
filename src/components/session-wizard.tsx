@@ -182,15 +182,15 @@ export function SessionWizard() {
                                                         // Deduct credits
                                                         await userService.deductCredits(user.uid, cost);
 
-                                                        // Call generation API
+                                                        // Call generation API — pass R2 keys, not HTTP URLs
                                                         const resp = await fetch("/api/generate", {
                                                             method: "POST",
                                                             headers: { "Content-Type": "application/json" },
                                                             body: JSON.stringify({
                                                                 sessionId: id,
                                                                 uid: user.uid,
-                                                                faceUrls: faceAssets.map(a => a.url),
-                                                                officeUrls: officeAssets.map(a => a.url),
+                                                                faceKeys: faceAssets.map(a => a.id),
+                                                                officeKeys: officeAssets.map(a => a.id),
                                                             })
                                                         });
 

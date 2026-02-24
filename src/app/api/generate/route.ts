@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
     try {
-        const body = await req.json();
-        const { sessionId, uid, faceUrls, officeUrls } = body;
+        const body = await req.json() as any;
+        const { sessionId, uid, faceKeys, officeKeys } = body;
 
-        if (!sessionId || !uid || !faceUrls?.length || !officeUrls?.length) {
+        if (!sessionId || !uid || !faceKeys?.length || !officeKeys?.length) {
             return NextResponse.json(
                 { error: "Missing required fields" },
                 { status: 400 }
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
         const workerResp = await fetch(`${workerUrl}/generate`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sessionId, uid, faceUrls, officeUrls }),
+            body: JSON.stringify({ sessionId, uid, faceKeys, officeKeys }),
         });
 
         if (!workerResp.ok) {
