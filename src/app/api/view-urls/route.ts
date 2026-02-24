@@ -5,7 +5,7 @@ import { r2Client } from "@/lib/r2";
 
 export async function POST(req: NextRequest) {
     try {
-        const { keys } = await req.json();
+        const { keys } = await req.json() as { keys: string[] };
 
         if (!keys || !Array.isArray(keys)) {
             return NextResponse.json(
