@@ -35,34 +35,21 @@ export function PhotoUploader({
                 for (const file of acceptedFiles) {
                     if (assets.length >= maxFiles) break;
 
-                    // 1. Get Signed URLs from our API
+                    // Upload via Next.js server — no CORS issues
+                    const formData = new FormData();
+                    formData.append("file", file);
+
                     const res = await fetch("/api/upload", {
                         method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            filename: file.name,
-                            contentType: file.type,
-                        }),
+                        body: formData,
                     });
 
-                    if (!res.ok) throw new Error("Failed to get upload URL");
-                    const { uploadUrl, viewUrl, key } = await res.json();
+                    if (!res.ok) throw new Error("Upload failed");
+                    const { viewUrl, key } = await res.json() as { viewUrl: string; key: string };
 
-                    // 2. Upload directly to Cloudflare R2
-                    const uploadRes = await fetch(uploadUrl, {
-                        method: "PUT",
-                        body: file,
-                        headers: {
-                            "Content-Type": file.type,
-                        },
-                    });
-
-                    if (!uploadRes.ok) throw new Error("Failed to upload to R2");
-
-                    // 3. Add to store
                     onUpload({
                         id: key,
-                        url: viewUrl, // Secure signed URL for viewing
+                        url: viewUrl,
                         name: file.name,
                         size: file.size,
                     });
