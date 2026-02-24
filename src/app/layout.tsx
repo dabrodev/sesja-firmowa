@@ -13,10 +13,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SesjaFirmowa.pl - Profesjonalna Sesja Biznesowa i Wizerunkowa AI",
+  title: "SesjaFirmowa.pl - profesjonalna sesja biznesowa i wizerunkowa AI",
   description: "Zmień swoje selfie w profesjonalną sesję firmową bez fotografa. Najlepsza sesja biznesowa i wizerunkowa dla firm, prawników i agentów nieruchomości napędzana przez AI.",
   keywords: ["sesja firmowa", "sesja biznesowa", "sesja wizerunkowa", "sesja AI", "zdjęcia biznesowe"],
 };
+
+import { AuthProvider } from "@/components/auth-provider";
 
 export default function RootLayout({
   children,
@@ -28,7 +30,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );

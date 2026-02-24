@@ -32,6 +32,7 @@ interface AppState {
     addOfficeReference: (asset: PhotoAsset) => void;
     removeFaceReference: (id: string) => void;
     removeOfficeReference: (id: string) => void;
+    resetSession: () => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -79,6 +80,20 @@ export const useAppStore = create<AppState>()(
                         ? { ...state.currentOffice, officeReferences: state.currentOffice.officeReferences.filter(a => a.id !== id) }
                         : null
                 })),
+
+            resetSession: () =>
+                set({
+                    currentPersona: {
+                        id: "default-persona",
+                        name: "My Profile",
+                        faceReferences: [],
+                    },
+                    currentOffice: {
+                        id: "default-office",
+                        name: "Main Office",
+                        officeReferences: [],
+                    },
+                }),
         }),
         {
             name: "corporate-session-storage",

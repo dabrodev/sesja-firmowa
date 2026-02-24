@@ -1,51 +1,63 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { User, Building2, Sparkles, ChevronRight, ChevronLeft } from "lucide-react";
+import { User, Building2, Sparkles, ChevronRight, ChevronLeft, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAppStore } from "@/lib/store";
 import { PhotoUploader } from "@/components/photo-uploader";
-import { GenerationResults } from "@/components/generation-results";
+import { GenerationResults, MOCK_RESULTS } from "@/components/generation-results";
+import { useAuth } from "@/components/auth-provider";
+import { sessionService } from "@/lib/sessions";
+import { userService } from "@/lib/users";
+import { cn } from "@/lib/utils";
 
 export function SessionWizard() {
     const [step, setStep] = useState<"face" | "office" | "generate">("face");
     const [isGenerating, setIsGenerating] = useState(false);
     const [hasCompleted, setHasCompleted] = useState(false);
+    const [sessionId, setSessionId] = useState<string | null>(null);
+    const { user, userProfile } = useAuth();
     const { currentPersona, currentOffice, addFaceReference, removeFaceReference, addOfficeReference, removeOfficeReference } = useAppStore();
 
     const faceAssets = currentPersona?.faceReferences || [];
     const officeAssets = currentOffice?.officeReferences || [];
 
+    const steps = [
+        { id: "face", label: "Wizerunek", icon: <User className="h-4 w-4" />, completed: faceAssets.length >= 3 },
+        { id: "office", label: "Biuro", icon: <Building2 className="h-4 w-4" />, completed: officeAssets.length >= 1 },
+        { id: "generate", label: "Generuj", icon: <Sparkles className="h-4 w-4" />, completed: hasCompleted }
+    ];
+
     return (
         <div className="mx-auto max-w-5xl space-y-8 py-12 px-4">
             {/* Wizard Progress */}
-            <div className="flex items-center justify-center gap-4">
-                <WizardStep
-                    active={step === "face"}
-                    completed={faceAssets.length >= 3}
-                    icon={<User className="h-4 w-4" />}
-                    label="Face References"
-                />
-                <div className="h-px w-12 bg-white/10" />
-                <WizardStep
-                    active={step === "office"}
-                    completed={officeAssets.length >= 1}
-                    icon={<Building2 className="h-4 w-4" />}
-                    label="Office Identity"
-                />
-                <div className="h-px w-12 bg-white/10" />
-                <WizardStep
-                    active={step === "generate"}
-                    completed={false}
-                    icon={<Sparkles className="h-4 w-4" />}
-                    label="AI Generation"
-                />
+            <div className="flex items-center justify-center gap-4 mb-12">
+                {steps.map((s, i) => (
+                    <React.Fragment key={s.id}>
+                        <WizardStep
+                            active={step === s.id}
+                            completed={s.completed}
+                            icon={s.icon}
+                            label={s.label}
+                            onClick={() => {
+                                const prevCompleted = i === 0 || steps[i - 1].completed;
+                                if (prevCompleted || step === s.id) setStep(s.id as any);
+                            }}
+                        />
+                        {i < steps.length - 1 && (
+                            <div className={cn(
+                                "h-px w-12 transition-all duration-700",
+                                s.completed ? "bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" : "bg-white/10"
+                            )} />
+                        )}
+                    </React.Fragment>
+                ))}
             </div>
 
-            <Card className="overflow-hidden border-white/10 bg-white/5 backdrop-blur-xl">
+            <Card className="overflow-hidden border-white/10 bg-white/5 backdrop-blur-xl shadow-2xl relative">
+                <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-transparent via-blue-500/50 to-transparent opacity-30" />
                 <CardContent className="p-8">
                     <AnimatePresence mode="wait">
                         {step === "face" && (
@@ -57,8 +69,8 @@ export function SessionWizard() {
                                 className="space-y-8"
                             >
                                 <PhotoUploader
-                                    title="Your Face References"
-                                    description="Upload at least 3 high-quality portraits from different angles. This helps the AI learn your features for the corporate shoot."
+                                    title="Twoje zdjęcia referencyjne"
+                                    description="Wgraj minimum 3 wyraźne zdjęcia swojej twarzy. Dzięki temu AI nauczy się Twoich rysów i idealnie dopasuje je do sesji."
                                     assets={faceAssets}
                                     onUpload={addFaceReference}
                                     onRemove={removeFaceReference}
@@ -68,9 +80,9 @@ export function SessionWizard() {
                                     <Button
                                         disabled={faceAssets.length < 3}
                                         onClick={() => setStep("office")}
-                                        className="bg-blue-600 hover:bg-blue-700"
+                                        className="bg-blue-600 hover:bg-blue-700 h-12 px-8 shadow-lg shadow-blue-500/20"
                                     >
-                                        Next Step: Office Context <ChevronRight className="ml-2 h-4 w-4" />
+                                        dalej: biuro i lokalizacja <ChevronRight className="ml-2 h-4 w-4" />
                                     </Button>
                                 </div>
                             </motion.div>
@@ -85,23 +97,23 @@ export function SessionWizard() {
                                 className="space-y-8"
                             >
                                 <PhotoUploader
-                                    title="Office Environments"
-                                    description="Upload photos of your workspace, reception, or meeting rooms. The AI will place you in these exact environments."
+                                    title="Twoje lokalizacje"
+                                    description="Wgraj zdjęcia swojego biura lub wybierz jedno z naszych wnętrz. AI umieści Cię w profesjonalnym otoczeniu biznesowym."
                                     assets={officeAssets}
                                     onUpload={addOfficeReference}
                                     onRemove={removeOfficeReference}
                                     maxFiles={5}
                                 />
                                 <div className="flex justify-between">
-                                    <Button variant="ghost" onClick={() => setStep("face")} className="text-zinc-400">
-                                        <ChevronLeft className="mr-2 h-4 w-4" /> Back to Face
+                                    <Button variant="ghost" onClick={() => setStep("face")} className="text-zinc-400 hover:bg-white/5">
+                                        <ChevronLeft className="mr-2 h-4 w-4" /> Wróć do zdjęć twarzy
                                     </Button>
                                     <Button
                                         disabled={officeAssets.length < 1}
                                         onClick={() => setStep("generate")}
-                                        className="bg-blue-600 hover:bg-blue-700"
+                                        className="bg-gradient-to-br from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 h-12 px-8 shadow-lg shadow-blue-500/20 text-white border border-white/10"
                                     >
-                                        Next Step: Review & Generate <ChevronRight className="ml-2 h-4 w-4" />
+                                        dalej: podsumowanie <ChevronRight className="ml-2 h-4 w-4" />
                                     </Button>
                                 </div>
                             </motion.div>
@@ -117,63 +129,133 @@ export function SessionWizard() {
                             >
                                 {!isGenerating && !hasCompleted ? (
                                     <div className="text-center space-y-8 py-12">
-                                        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-blue-500/10 text-blue-400">
-                                            <Sparkles className="h-10 w-10" />
-                                        </div>
+                                        <motion.div
+                                            initial={{ scale: 0.8, opacity: 0 }}
+                                            animate={{ scale: 1, opacity: 1 }}
+                                            className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                                        >
+                                            <Sparkles className="h-10 w-10 animate-pulse" />
+                                        </motion.div>
                                         <div>
-                                            <h2 className="text-2xl font-bold text-white">Wszystko gotowe</h2>
-                                            <p className="mx-auto mt-2 max-w-md text-zinc-400">
-                                                Dopasowaliśmy Twoje zdjęcia do wybranych wnętrz biurowych.
-                                                Twoja spersonalizowana sesja jest gotowa do wygenerowania.
+                                            <h2 className="text-3xl font-bold text-white tracking-tight">Gotowy na sesję AI?</h2>
+                                            <p className="mx-auto mt-4 max-w-md text-zinc-400 leading-relaxed">
+                                                Wszystkie dane zostały przygotowane. System AI przeanalizuje twoje rysy i stworzy fotorealistyczną sesję w wybranych wnętrzach.
                                             </p>
                                         </div>
 
-                                        <div className="grid grid-cols-2 gap-4 max-w-md mx-auto">
-                                            <div className="rounded-lg bg-white/5 p-4 border border-white/10 text-left">
-                                                <span className="text-[10px] uppercase tracking-wider text-zinc-500">Postać</span>
-                                                <div className="mt-1 font-medium">{faceAssets.length} zdjęć referencyjnych</div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-md mx-auto">
+                                            <div className="rounded-2xl bg-white/5 p-5 border border-white/10 text-left hover:border-blue-500/30 transition-all group">
+                                                <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 group-hover:text-blue-400 transition-colors">Postać</span>
+                                                <div className="mt-1 text-lg font-medium text-white">{faceAssets.length} zdjęć referencyjnych</div>
                                             </div>
-                                            <div className="rounded-lg bg-white/5 p-4 border border-white/10 text-left">
-                                                <span className="text-[10px] uppercase tracking-wider text-zinc-500">Otoczenie</span>
-                                                <div className="mt-1 font-medium">{officeAssets.length} lokalizacji</div>
+                                            <div className="rounded-2xl bg-white/5 p-5 border border-white/10 text-left hover:border-blue-500/30 transition-all group">
+                                                <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 group-hover:text-blue-400 transition-colors">Otoczenie</span>
+                                                <div className="mt-1 text-lg font-medium text-white">{officeAssets.length} lokalizacji biurowej</div>
                                             </div>
                                         </div>
 
                                         <div className="flex flex-col items-center gap-4 pt-10">
                                             <Button
                                                 size="lg"
-                                                onClick={() => {
+                                                disabled={isGenerating || (userProfile ? userProfile.credits < 120 : true)}
+                                                onClick={async () => {
+                                                    if (!user) return;
+                                                    const cost = 120; // 4 photos × 30 pts
+
+                                                    if (userProfile && userProfile.credits < cost) {
+                                                        alert("Brak punktów. Potrzebujesz " + cost + " pkt.");
+                                                        return;
+                                                    }
+
                                                     setIsGenerating(true);
-                                                    setTimeout(() => {
+
+                                                    try {
+                                                        // Save session first to get ID
+                                                        const id = await sessionService.saveSession(user.uid, {
+                                                            faceReferences: faceAssets.map(a => a.url),
+                                                            officeReferences: officeAssets.map(a => a.url),
+                                                            results: [],
+                                                            status: "processing"
+                                                        });
+                                                        setSessionId(id);
+
+                                                        // Deduct credits
+                                                        await userService.deductCredits(user.uid, cost);
+
+                                                        // Call generation API
+                                                        const resp = await fetch("/api/generate", {
+                                                            method: "POST",
+                                                            headers: { "Content-Type": "application/json" },
+                                                            body: JSON.stringify({
+                                                                sessionId: id,
+                                                                uid: user.uid,
+                                                                faceUrls: faceAssets.map(a => a.url),
+                                                                officeUrls: officeAssets.map(a => a.url),
+                                                            })
+                                                        });
+
+                                                        if (!resp.ok) {
+                                                            const err = await resp.json();
+                                                            throw new Error(err.error || "Generowanie nieudane");
+                                                        }
+
+                                                        const { resultUrls } = await resp.json();
+
+                                                        // Update session with results
+                                                        await sessionService.updateSession(id, {
+                                                            results: resultUrls,
+                                                            status: "completed"
+                                                        });
+
                                                         setHasCompleted(true);
                                                         setIsGenerating(false);
-                                                    }, 3000);
+
+                                                    } catch (error: any) {
+                                                        console.error("Failed to generate:", error);
+                                                        alert("Błąd generowania: " + error.message);
+                                                        setIsGenerating(false);
+                                                    }
                                                 }}
-                                                className="h-14 w-64 bg-blue-600 text-lg font-bold hover:bg-blue-700"
+                                                className="h-16 w-64 bg-gradient-to-br from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 text-xl font-bold shadow-2xl shadow-blue-500/30 transition-all hover:scale-105 active:scale-95 rounded-2xl text-white border border-white/10"
                                             >
-                                                Generuj sesję
+                                                rozpocznij generowanie
                                             </Button>
-                                            <Button variant="ghost" onClick={() => setStep("office")} className="text-zinc-400">
-                                                <ChevronLeft className="mr-2 h-4 w-4" /> Powrót
+                                            <p className="text-xs text-zinc-500">koszt: 120 PKT za 4 fotografie AI</p>
+                                            <Button variant="ghost" onClick={() => setStep("office")} className="text-zinc-500 hover:text-white transition-colors">
+                                                <ChevronLeft className="mr-2 h-4 w-4" /> Wróć do edycji parametrów
                                             </Button>
                                         </div>
                                     </div>
                                 ) : isGenerating ? (
-                                    <div className="text-center space-y-8 py-24">
-                                        <div className="relative mx-auto h-24 w-24">
-                                            <div className="absolute inset-0 animate-ping rounded-full bg-blue-500/20" />
-                                            <div className="relative flex h-full w-full items-center justify-center rounded-full bg-blue-600">
-                                                <Sparkles className="h-10 w-10 text-white animate-pulse" />
+                                    <div className="text-center space-y-10 py-24">
+                                        <div className="relative mx-auto h-32 w-32">
+                                            <motion.div
+                                                animate={{ scale: [1, 1.2, 1], opacity: [0.2, 0.5, 0.2] }}
+                                                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                                                className="absolute inset-0 rounded-full bg-blue-500/30 blur-xl"
+                                            />
+                                            <div className="relative flex h-full w-full items-center justify-center rounded-3xl bg-gradient-to-br from-blue-600 to-indigo-700 shadow-2xl shadow-blue-500/50">
+                                                <Sparkles className="h-14 w-14 text-white animate-pulse" />
                                             </div>
                                         </div>
-                                        <div className="space-y-2">
-                                            <h2 className="text-2xl font-bold text-white">Tworzymy magię...</h2>
-                                            <p className="text-zinc-400 italic">Dopasowujemy światło, tekstury i głębię Twojego biura.</p>
+                                        <div className="space-y-4">
+                                            <h2 className="text-3xl font-bold text-white tracking-tight">Tworzymy twoją sesję...</h2>
+                                            <div className="flex flex-col items-center gap-2">
+                                                <div className="h-1 w-48 overflow-hidden rounded-full bg-white/5">
+                                                    <motion.div
+                                                        initial={{ x: "-100%" }}
+                                                        animate={{ x: "100%" }}
+                                                        transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+                                                        className="h-full w-full bg-gradient-to-r from-transparent via-blue-500 to-transparent"
+                                                    />
+                                                </div>
+                                                <p className="text-zinc-500 text-sm animate-pulse tracking-wide uppercase">Analiza rysów twarzy | Dopasowanie światła</p>
+                                            </div>
                                         </div>
                                     </div>
                                 ) : null}
 
-                                {hasCompleted && <GenerationResults />}
+                                {hasCompleted && <GenerationResults sessionId={sessionId} />}
                             </motion.div>
                         )}
                     </AnimatePresence>
@@ -183,23 +265,59 @@ export function SessionWizard() {
     );
 }
 
-function WizardStep({ active, completed, icon, label }: { active: boolean, completed: boolean, icon: React.ReactNode, label: string }) {
+function WizardStep({
+    active,
+    completed,
+    icon,
+    label,
+    onClick
+}: {
+    active: boolean;
+    completed: boolean;
+    icon: React.ReactNode;
+    label: string;
+    onClick: () => void;
+}) {
     return (
-        <div className={cn(
-            "flex flex-col items-center gap-2",
-            active ? "text-blue-400" : completed ? "text-emerald-400" : "text-zinc-500"
-        )}>
-            <div className={cn(
-                "flex h-10 w-10 items-center justify-center rounded-full border-2 transition-colors",
-                active ? "border-blue-400 bg-blue-400/10 shadow-[0_0_15px_rgba(59,130,246,0.3)]" :
-                    completed ? "border-emerald-400 bg-emerald-400/10" : "border-white/10 bg-white/5"
-            )}>
-                {completed ? <CheckCircle2 className="h-5 w-5" /> : icon}
+        <button
+            onClick={onClick}
+            className={cn(
+                "group relative flex flex-col items-center gap-3 transition-all duration-500 focus:outline-none",
+                active ? "opacity-100 scale-105" : completed ? "opacity-80" : "opacity-40 hover:opacity-100"
+            )}
+        >
+            <div
+                className={cn(
+                    "flex h-14 w-14 items-center justify-center rounded-2xl border transition-all duration-500",
+                    active
+                        ? "border-blue-500 bg-blue-600 text-white shadow-2xl shadow-blue-500/40"
+                        : completed
+                            ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-400"
+                            : "border-white/10 bg-white/5 text-zinc-500"
+                )}
+            >
+                {completed ? <CheckCircle2 className="h-6 w-6" /> : icon}
             </div>
-            <span className="text-xs font-semibold uppercase tracking-wider">{label}</span>
-        </div>
+            <div className="flex flex-col items-center">
+                <span className={cn(
+                    "text-[10px] font-bold uppercase tracking-[0.2em] transition-colors",
+                    active ? "text-blue-400" : completed ? "text-emerald-500/70" : "text-zinc-600"
+                )}>
+                    {completed ? "Ukończono" : active ? "W trakcie" : "Kolejny"}
+                </span>
+                <span className={cn(
+                    "text-xs font-semibold mt-0.5 transition-colors",
+                    active ? "text-white" : "text-zinc-500"
+                )}>
+                    {label}
+                </span>
+            </div>
+            {active && (
+                <motion.div
+                    layoutId="active-indicator"
+                    className="absolute -bottom-4 h-1 w-1 rounded-full bg-blue-500 shadow-[0_0_10px_#3b82f6]"
+                />
+            )}
+        </button>
     );
 }
-
-import { CheckCircle2 } from "lucide-react";
-import { cn } from "@/lib/utils";

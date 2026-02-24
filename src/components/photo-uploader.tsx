@@ -28,23 +28,50 @@ export function PhotoUploader({
     const [isUploading, setIsUploading] = useState(false);
 
     const onDrop = useCallback(
-        (acceptedFiles: File[]) => {
+        async (acceptedFiles: File[]) => {
             setIsUploading(true);
-            // Mocking upload process
-            setTimeout(() => {
-                acceptedFiles.forEach((file) => {
-                    if (assets.length < maxFiles) {
-                        const newAsset: PhotoAsset = {
-                            id: Math.random().toString(36).substring(7),
-                            url: URL.createObjectURL(file), // Local URL for preview
-                            name: file.name,
-                            size: file.size,
-                        };
-                        onUpload(newAsset);
-                    }
-                });
+
+            try {
+                for (const file of acceptedFiles) {
+                    if (assets.length >= maxFiles) break;
+
+                    // 1. Get Signed URLs from our API
+                    const res = await fetch("/api/upload", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            filename: file.name,
+                            contentType: file.type,
+                        }),
+                    });
+
+                    if (!res.ok) throw new Error("Failed to get upload URL");
+                    const { uploadUrl, viewUrl, key } = await res.json();
+
+                    // 2. Upload directly to Cloudflare R2
+                    const uploadRes = await fetch(uploadUrl, {
+                        method: "PUT",
+                        body: file,
+                        headers: {
+                            "Content-Type": file.type,
+                        },
+                    });
+
+                    if (!uploadRes.ok) throw new Error("Failed to upload to R2");
+
+                    // 3. Add to store
+                    onUpload({
+                        id: key,
+                        url: viewUrl, // Secure signed URL for viewing
+                        name: file.name,
+                        size: file.size,
+                    });
+                }
+            } catch (error) {
+                console.error("Upload error:", error);
+            } finally {
                 setIsUploading(false);
-            }, 1000);
+            }
         },
         [onUpload, assets, maxFiles]
     );

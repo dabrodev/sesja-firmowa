@@ -1,0 +1,25 @@
+{
+    "rules": [
+        {
+            "allowedOrigins": [
+                "http://localhost:3000",
+                "https://sesjafirmowa.pl",
+                "https://*.vercel.app"
+            ],
+            "allowedMethods": [
+                "GET",
+                "PUT",
+                "POST",
+                "DELETE",
+                "HEAD"
+            ],
+            "allowedHeaders": [
+                "*"
+            ],
+            "exposeHeaders": [
+                "ETag"
+            ],
+            "maxAgeSeconds": 3600
+        }
+    ]
+}
