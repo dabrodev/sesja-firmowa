@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { r2Client } from "@/lib/r2";
 
@@ -12,28 +12,42 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "No file provided" }, { status: 400 });
         }
 
-        const key = `uploads/${Date.now()}-${file.name}`;
-        const bucketName = process.env.R2_BUCKET_NAME!;
-        const buffer = Buffer.from(await file.arrayBuffer());
+        const workerUrl = process.env.CLOUDFLARE_WORKER_URL;
+        if (!workerUrl) {
+            return NextResponse.json({ error: "Worker URL not configured" }, { status: 500 });
+        }
 
-        // Upload server-side — no CORS issues
-        await r2Client.send(new PutObjectCommand({
-            Bucket: bucketName,
-            Key: key,
-            Body: buffer,
-            ContentType: file.type,
-        }));
+        // Upload the file to the Worker (uses R2 binding — no S3 permission needed)
+        const workerForm = new FormData();
+        workerForm.append("file", file);
 
-        // Generate a signed GET URL for viewing (24h)
+        const workerResp = await fetch(`${workerUrl}/upload`, {
+            method: "POST",
+            body: workerForm,
+        });
+
+        if (!workerResp.ok) {
+            const err = await workerResp.text();
+            console.error("Worker upload error:", err);
+            return NextResponse.json({ error: "Upload to R2 failed" }, { status: 500 });
+        }
+
+        const { key } = await workerResp.json() as { key: string };
+
+        // Generate a signed GET URL for viewing (24h) using read-capable S3 credentials
         const viewUrl = await getSignedUrl(
             r2Client,
-            new GetObjectCommand({ Bucket: bucketName, Key: key }),
+            new GetObjectCommand({
+                Bucket: process.env.R2_BUCKET_NAME!,
+                Key: key,
+            }),
             { expiresIn: 86400 }
         );
 
         return NextResponse.json({ viewUrl, key });
-    } catch (error) {
-        console.error("Upload error:", error);
-        return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+
+    } catch (error: any) {
+        console.error("Upload route error:", error);
+        return NextResponse.json({ error: error.message || "Upload failed" }, { status: 500 });
     }
 }

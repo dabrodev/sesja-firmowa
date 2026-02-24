@@ -38,6 +38,14 @@ export default {
             });
         }
 
+        // Upload reference photos via R2 binding (bypasses S3 credential issues)
+        if (url.pathname === "/upload") {
+            if (request.method !== "POST") {
+                return new Response("Method not allowed", { status: 405, headers: CORS_HEADERS });
+            }
+            return handleUpload(request, env);
+        }
+
         if (url.pathname !== "/generate") {
             return new Response(JSON.stringify({ error: "Not found" }), {
                 status: 404, headers: { ...CORS_HEADERS, "Content-Type": "application/json" }
@@ -103,6 +111,39 @@ export default {
         }
     },
 };
+
+// ─── Handle file uploads via R2 binding ──────────────────────────────────────
+
+async function handleUpload(request: Request, env: Env): Promise<Response> {
+    try {
+        const formData = await request.formData();
+        const file = formData.get("file") as File | null;
+
+        if (!file) {
+            return new Response(JSON.stringify({ error: "No file provided" }), {
+                status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" }
+            });
+        }
+
+        const key = `uploads/${Date.now()}-${file.name}`;
+        const buffer = await file.arrayBuffer();
+
+        await env.MEDIA_BUCKET.put(key, buffer, {
+            httpMetadata: { contentType: file.type || "image/jpeg" },
+        });
+
+        // Return the key — the Next.js server will generate a signed view URL
+        return new Response(JSON.stringify({ key, success: true }), {
+            status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" }
+        });
+
+    } catch (error: any) {
+        console.error("Upload error:", error);
+        return new Response(JSON.stringify({ error: error.message || "Upload failed" }), {
+            status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" }
+        });
+    }
+}
 
 // ─── Helper: Fetch images and convert to base64 ──────────────────────────────
 
