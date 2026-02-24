@@ -13,8 +13,19 @@ import {
   navigationMenuTriggerStyle
 } from "@/components/ui/navigation-menu";
 import Link from "next/link";
-import { MOCK_RESULTS } from "@/components/generation-results";
 import { useAuth } from "@/components/auth-provider";
+
+const MOCK_RESULTS = [
+  "/photoshoot-team.png",
+  "/photoshoot-architekt-v2.png",
+  "/photoshoot-lekarz.png",
+  "/photoshoot-nieruchomosci.png",
+  "/photoshoot-rzemieslnik.png",
+  "/photoshoot-1.png",
+  "/photoshoot-2.png",
+  "/photoshoot-3.png",
+  "/corporate-portrait.png",
+];
 import {
   DropdownMenu,
   DropdownMenuContent,

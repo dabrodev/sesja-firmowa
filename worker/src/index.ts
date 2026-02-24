@@ -335,7 +335,7 @@ async function uploadResultsToR2(
     base64Images: string[]
 ): Promise<string[]> {
     const urls: string[] = [];
-    const accountId = env.CLOUDFLARE_ACCOUNT_ID;
+    const workerUrl = `https://sesja-firmowa.damiandabrodev.workers.dev`;
 
     for (let i = 0; i < base64Images.length; i++) {
         const key = `results/${sessionId}/photo-${i + 1}.jpg`;
@@ -345,10 +345,9 @@ async function uploadResultsToR2(
             httpMetadata: { contentType: "image/jpeg" },
         });
 
-        // Construct public URL (requires R2 public access or custom domain)
-        // Using the Cloudflare R2 public URL format
-        const publicUrl = `https://pub-${accountId}.r2.dev/${key}`;
-        urls.push(publicUrl);
+        // Serve via Worker /file endpoint (uses R2 binding — no public access needed)
+        const fileUrl = `${workerUrl}/file?key=${encodeURIComponent(key)}`;
+        urls.push(fileUrl);
     }
 
     return urls;

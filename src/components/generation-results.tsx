@@ -4,22 +4,14 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Download, Share2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-export const MOCK_RESULTS = [
-    "/photoshoot-team.png",
-    "/photoshoot-architekt-v2.png",
-    "/photoshoot-lekarz.png",
-    "/photoshoot-nieruchomosci.png",
-    "/photoshoot-rzemieslnik.png",
-    "/photoshoot-1.png",
-    "/photoshoot-2.png",
-    "/photoshoot-3.png",
-    "/corporate-portrait.png",
-];
-
 import { useAppStore } from "@/lib/store";
 
-export function GenerationResults({ sessionId }: { sessionId?: string | null }) {
+interface GenerationResultsProps {
+    sessionId?: string | null;
+    resultUrls?: string[];
+}
+
+export function GenerationResults({ sessionId, resultUrls = [] }: GenerationResultsProps) {
     const { resetSession } = useAppStore();
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
@@ -40,28 +32,43 @@ export function GenerationResults({ sessionId }: { sessionId?: string | null }) 
                 </div>
             </div>
 
-            <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-8">
-                {MOCK_RESULTS.map((url, i) => (
-                    <motion.div
-                        key={i}
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: i * 0.1 }}
-                        className="group relative aspect-[3/4] overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 shadow-2xl cursor-pointer"
-                        onClick={() => setSelectedImage(url)}
-                    >
-                        <img src={url} alt={`Wynik ${i}`} className="h-full w-full object-cover grayscale-[0.2] transition-all duration-500 group-hover:grayscale-0 group-hover:scale-105" />
-                        <div className="absolute inset-0 bg-black/60 opacity-0 transition-opacity group-hover:opacity-100 flex items-center justify-center gap-4">
-                            <Button size="icon" variant="secondary" className="rounded-full" onClick={(e) => e.stopPropagation()}>
-                                <Download className="h-5 w-5" />
-                            </Button>
-                            <Button size="icon" variant="secondary" className="rounded-full" onClick={(e) => e.stopPropagation()}>
-                                <Share2 className="h-5 w-5" />
-                            </Button>
-                        </div>
-                    </motion.div>
-                ))}
-            </div>
+            {resultUrls.length > 0 ? (
+                <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {resultUrls.map((url, i) => (
+                        <motion.div
+                            key={i}
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: i * 0.15 }}
+                            className="group relative aspect-[3/4] overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 shadow-2xl cursor-pointer"
+                            onClick={() => setSelectedImage(url)}
+                        >
+                            <img
+                                src={url}
+                                alt={`Wynik ${i + 1}`}
+                                className="h-full w-full object-cover transition-all duration-500 group-hover:scale-105"
+                                onError={(e) => {
+                                    (e.target as HTMLImageElement).style.display = "none";
+                                }}
+                            />
+                            <div className="absolute inset-0 bg-black/60 opacity-0 transition-opacity group-hover:opacity-100 flex items-center justify-center gap-4">
+                                <a href={url} download={`sesja-${i + 1}.jpg`} onClick={(e) => e.stopPropagation()}>
+                                    <Button size="icon" variant="secondary" className="rounded-full">
+                                        <Download className="h-5 w-5" />
+                                    </Button>
+                                </a>
+                                <Button size="icon" variant="secondary" className="rounded-full" onClick={(e) => e.stopPropagation()}>
+                                    <Share2 className="h-5 w-5" />
+                                </Button>
+                            </div>
+                        </motion.div>
+                    ))}
+                </div>
+            ) : (
+                <div className="text-center py-12 text-zinc-500">
+                    Ładowanie wyników...
+                </div>
+            )}
 
             <div className="flex justify-center pt-8">
                 <Button

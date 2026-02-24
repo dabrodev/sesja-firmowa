@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAppStore } from "@/lib/store";
 import { PhotoUploader } from "@/components/photo-uploader";
-import { GenerationResults, MOCK_RESULTS } from "@/components/generation-results";
+import { GenerationResults } from "@/components/generation-results";
 import { useAuth } from "@/components/auth-provider";
 import { sessionService } from "@/lib/sessions";
 import { userService } from "@/lib/users";
@@ -18,6 +18,7 @@ export function SessionWizard() {
     const [isGenerating, setIsGenerating] = useState(false);
     const [hasCompleted, setHasCompleted] = useState(false);
     const [sessionId, setSessionId] = useState<string | null>(null);
+    const [resultUrls, setResultUrls] = useState<string[]>([]);
     const { user, userProfile } = useAuth();
     const { currentPersona, currentOffice, addFaceReference, removeFaceReference, addOfficeReference, removeOfficeReference } = useAppStore();
 
@@ -199,11 +200,13 @@ export function SessionWizard() {
                                                             throw new Error(err.error || "Generowanie nieudane");
                                                         }
 
-                                                        const { resultUrls } = await resp.json();
+                                                        const result = await resp.json() as { resultUrls: string[] };
+                                                        const urls = result.resultUrls || [];
+                                                        setResultUrls(urls);
 
                                                         // Update session with results
                                                         await sessionService.updateSession(id, {
-                                                            results: resultUrls,
+                                                            results: urls,
                                                             status: "completed"
                                                         });
 
@@ -255,7 +258,7 @@ export function SessionWizard() {
                                     </div>
                                 ) : null}
 
-                                {hasCompleted && <GenerationResults sessionId={sessionId} />}
+                                {hasCompleted && <GenerationResults sessionId={sessionId} resultUrls={resultUrls} />}
                             </motion.div>
                         )}
                     </AnimatePresence>
