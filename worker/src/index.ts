@@ -46,6 +46,28 @@ export default {
             return handleUpload(request, env);
         }
 
+        // Serve files from R2 binding directly
+        if (url.pathname === "/file") {
+            const key = url.searchParams.get("key");
+            if (!key) {
+                return new Response(JSON.stringify({ error: "Missing key" }), {
+                    status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" }
+                });
+            }
+            const object = await env.MEDIA_BUCKET.get(key);
+            if (!object) {
+                return new Response("Not found", { status: 404, headers: CORS_HEADERS });
+            }
+            const contentType = object.httpMetadata?.contentType || "image/jpeg";
+            return new Response(object.body, {
+                headers: {
+                    ...CORS_HEADERS,
+                    "Content-Type": contentType,
+                    "Cache-Control": "public, max-age=86400",
+                }
+            });
+        }
+
         if (url.pathname !== "/generate") {
             return new Response(JSON.stringify({ error: "Not found" }), {
                 status: 404, headers: { ...CORS_HEADERS, "Content-Type": "application/json" }

@@ -6,6 +6,7 @@ compatibility_flags = ["nodejs_compat"]
 [[r2_buckets]]
 binding = "MEDIA_BUCKET"
 bucket_name = "sesja-firmowa-media"
+jurisdiction = "eu"
 
 [vars]
 CLOUDFLARE_ACCOUNT_ID = "aff7fb06fb1cd82ef142281f4ee41b88"

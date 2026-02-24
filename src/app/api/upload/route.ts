@@ -1,7 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GetObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { r2Client } from "@/lib/r2";
 
 export async function POST(req: NextRequest) {
     try {
@@ -17,7 +14,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Worker URL not configured" }, { status: 500 });
         }
 
-        // Upload the file to the Worker (uses R2 binding — no S3 permission needed)
+        // Upload via Worker R2 binding
         const workerForm = new FormData();
         workerForm.append("file", file);
 
@@ -29,20 +26,13 @@ export async function POST(req: NextRequest) {
         if (!workerResp.ok) {
             const err = await workerResp.text();
             console.error("Worker upload error:", err);
-            return NextResponse.json({ error: "Upload to R2 failed" }, { status: 500 });
+            return NextResponse.json({ error: "Upload failed" }, { status: 500 });
         }
 
         const { key } = await workerResp.json() as { key: string };
 
-        // Generate a signed GET URL for viewing (24h) using read-capable S3 credentials
-        const viewUrl = await getSignedUrl(
-            r2Client,
-            new GetObjectCommand({
-                Bucket: process.env.R2_BUCKET_NAME!,
-                Key: key,
-            }),
-            { expiresIn: 86400 }
-        );
+        // Serve the file via Worker's /file endpoint (uses same R2 binding)
+        const viewUrl = `${workerUrl}/file?key=${encodeURIComponent(key)}`;
 
         return NextResponse.json({ viewUrl, key });
 
