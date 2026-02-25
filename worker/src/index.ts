@@ -50,10 +50,10 @@ export class GenerationWorkflow extends WorkflowEntrypoint<Env, GenerateParams> 
         // Steps 2-5: Generate each variation independently (1 step per image)
         // Variations = pose/angle/framing — NOT expression (preserve natural expression from reference photos)
         const variations = [
-            "Pose: facing camera directly, slightly loose framing showing upper body (3/4 shot). Maintain the EXACT natural facial expression from the reference photos.",
-            "Pose: slightly angled to the right (3/4 profile), upper body visible. Maintain the EXACT natural facial expression from the reference photos.",
-            "Pose: seated or leaning against desk, relaxed professional posture, upper body shot. Maintain the EXACT natural facial expression from the reference photos.",
-            "Pose: candid-style, subject looking slightly off to the side as if thinking, upper body framing. Maintain the EXACT natural facial expression from the reference photos.",
+            "Scene: person looking directly at camera, upper body framing, natural moment between tasks. Maintain their EXACT natural facial expression from the reference photos — do not alter it.",
+            "Scene: person working at laptop or reviewing documents at their desk, slightly angled, candid moment of focused work. Maintain their EXACT natural facial expression from the reference photos.",
+            "Scene: person in mid-conversation or presenting — gesturing naturally or leaning forward, engaged posture, 3/4 body framing. Maintain their EXACT natural facial expression from the reference photos.",
+            "Scene: person standing near a window or by their workspace, looking thoughtfully to the side, candid documentary-style framing. Maintain their EXACT natural facial expression from the reference photos.",
         ];
 
         for (let i = 0; i < variations.length; i++) {
