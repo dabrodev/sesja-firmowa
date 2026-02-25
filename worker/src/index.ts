@@ -196,25 +196,21 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 
 async function generatePromptWithAzure(
     env: Env,
-    _faceImages: { base64: string; mimeType: string }[],
-    _officeImages: { base64: string; mimeType: string }[]
+    faceImages: { base64: string; mimeType: string }[],
+    officeImages: { base64: string; mimeType: string }[]
 ): Promise<string> {
-    const systemPrompt = `You are a professional photography prompt engineer specializing in corporate headshots and business photography. 
-Create a highly detailed, photorealistic image generation prompt for a corporate photoshoot session.`;
+    const systemPrompt = `You are a professional photography prompt engineer specializing in corporate headshots.
+Create a concise but detailed image generation prompt based on the reference photos provided.`;
 
-    const userMessage = `Generate a professional corporate photography prompt for a business headshot session.
-The images provided show the person's face references and office/workspace environment.
+    const userMessage = `I have ${faceImages.length} face reference photo(s) and ${officeImages.length} office/workspace reference photo(s).
 
-Requirements for the prompt:
-- Photorealistic, professional corporate headshot
-- Natural office lighting (window light + soft studio fill)
-- The person should look confident and approachable
-- Business attire appropriate for Polish corporate culture
-- Sharp focus on face, slightly blurred background (bokeh)
-- High-end camera quality feel (shot on Sony A7R V, 85mm lens, f/2.0)
-- Color grading: clean, professional, slightly warm tones
+Generate a photorealistic corporate headshot prompt that instructs the AI to:
+1. Preserve EXACTLY: the person's face structure, skin tone, hair color/style, and any visible clothing/outfit from the reference photos
+2. Place the person in the EXACT office environment shown in the office reference photos (same walls, furniture, lighting setup, color palette)
+3. Use professional photography settings: natural window light blended with soft studio fill, 85mm lens, f/2.0 bokeh
+4. Result: a polished, high-end corporate headshot suitable for LinkedIn and business profiles
 
-Generate ONLY the image prompt, nothing else. Make it 2-3 sentences.`;
+Generate ONLY the image prompt text. 2-3 sentences maximum.`;
 
     const resp = await fetch(
         `${env.AZURE_OPENAI_ENDPOINT}openai/deployments/${env.AZURE_OPENAI_DEPLOYMENT_NAME}/chat/completions?api-version=${env.AZURE_OPENAI_API_VERSION}`,
@@ -238,7 +234,6 @@ Generate ONLY the image prompt, nothing else. Make it 2-3 sentences.`;
     if (!resp.ok) {
         const err = await resp.text();
         console.error("Azure OpenAI error:", err);
-        // Fallback to default prompt
         return getDefaultPrompt();
     }
 
@@ -247,9 +242,7 @@ Generate ONLY the image prompt, nothing else. Make it 2-3 sentences.`;
 }
 
 function getDefaultPrompt(): string {
-    return `Professional corporate headshot of a business person in a modern Polish office environment. 
-Natural window light with soft studio fill, shot on Sony A7R V with 85mm lens at f/2.0. 
-Photorealistic, sharp focus on face with beautiful bokeh background, warm professional color grading.`;
+    return `Photorealistic professional corporate headshot. Preserve the person's exact face, skin tone, hair, and clothing from the reference photos. Place them in the exact office environment shown in the workspace reference photos. Natural window light with soft studio fill, 85mm f/2.0, warm professional color grading.`;
 }
 
 // ─── Helper: Generate images with Gemini ─────────────────────────────────────
@@ -273,17 +266,36 @@ async function generateImagesWithGemini(
     // Build message with all reference images inline
     const parts: any[] = [];
 
-    parts.push({ text: "Face reference photos of the person (maintain this person's identity exactly in the generated image):" });
+    // ── FACE REFERENCES ──────────────────────────────────────────────────────
+    parts.push({
+        text: `FACE REFERENCE PHOTOS (${faceImages.length} images):
+These show the EXACT person to photograph. You MUST:
+- Preserve their face structure, skin tone, eye color, nose shape, jawline 100% accurately
+- Keep their hair color, length, and style EXACTLY as shown
+- Reproduce their clothing/outfit/style precisely — same colors, fabric, neckline`
+    });
     for (const img of faceImages) {
         parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
     }
 
-    parts.push({ text: "Office/workspace reference photos (use this environment as the background/setting):" });
+    // ── OFFICE/ENVIRONMENT REFERENCES ────────────────────────────────────────
+    parts.push({
+        text: `OFFICE/WORKSPACE REFERENCE PHOTOS (${officeImages.length} images):
+This is the EXACT environment for the photo. You MUST:
+- Use this specific office space as the background/setting
+- Match the wall colors, furniture, decor, window placement, and ambient lighting
+- Keep the environment recognizable and consistent with these photos`
+    });
     for (const img of officeImages) {
         parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
     }
 
-    parts.push({ text: prompt });
+    // ── PHOTO STYLE INSTRUCTION ───────────────────────────────────────────────
+    parts.push({
+        text: `PHOTO STYLE: ${prompt}
+
+GENERATE the first professional corporate headshot photo now. The result must look like a real photograph taken by a professional photographer — not an illustration or painting.`
+    });
 
     const results: string[] = [];
 
