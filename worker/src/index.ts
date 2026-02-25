@@ -328,7 +328,7 @@ async function generateOneImage(
 
     // Throws on error — allows Workflow to retry the step
     const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash-preview-image-generation",
+        model: "gemini-3-pro-image-preview",
         contents: [{ role: "user", parts }],
         config: { responseModalities: ["TEXT", "IMAGE"] },
     });
