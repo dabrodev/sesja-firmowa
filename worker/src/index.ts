@@ -48,12 +48,12 @@ export class GenerationWorkflow extends WorkflowEntrypoint<Env, GenerateParams> 
         const resultKeys: string[] = [];
 
         // Steps 2-5: Generate each variation independently (1 step per image)
-        // This keeps step results small (just R2 key strings, not base64 images)
+        // Variations = pose/angle/framing — NOT expression (preserve natural expression from reference photos)
         const variations = [
-            "Direct eye contact, confident professional smile.",
-            "Three-quarter profile, thoughtful expression.",
-            "Looking slightly off-camera, serious authoritative expression.",
-            "Looking directly at camera, warm approachable smile.",
+            "Pose: facing camera directly, slightly loose framing showing upper body (3/4 shot). Maintain the EXACT natural facial expression from the reference photos.",
+            "Pose: slightly angled to the right (3/4 profile), upper body visible. Maintain the EXACT natural facial expression from the reference photos.",
+            "Pose: seated or leaning against desk, relaxed professional posture, upper body shot. Maintain the EXACT natural facial expression from the reference photos.",
+            "Pose: candid-style, subject looking slightly off to the side as if thinking, upper body framing. Maintain the EXACT natural facial expression from the reference photos.",
         ];
 
         for (let i = 0; i < variations.length; i++) {
@@ -251,16 +251,17 @@ async function fetchImagesFromR2(env: Env, keys: string[]): Promise<{ base64: st
 // ─── Generate prompt with Azure OpenAI ───────────────────────────────────────
 
 async function generatePromptWithAzure(env: Env, faceCount: number, officeCount: number): Promise<string> {
-    const systemPrompt = `You are a professional photography prompt engineer specializing in corporate headshots.
-Create a concise but detailed image generation prompt based on the reference photos provided.`;
+    const systemPrompt = `You are a professional photography prompt engineer specializing in corporate business photo sessions.
+Create a prompt for a high-end business photo session — NOT a passport or ID headshot.`;
 
     const userMessage = `I have ${faceCount} face reference photo(s) and ${officeCount} office/workspace reference photo(s).
 
-Generate a photorealistic corporate headshot prompt that instructs the AI to:
+Generate a photorealistic business photo session prompt that instructs the AI to:
 1. Preserve EXACTLY: the person's face structure, skin tone, hair color/style, and any visible clothing/outfit from the reference photos
-2. Place the person in the EXACT office environment shown in the office reference photos (same walls, furniture, lighting setup, color palette)
-3. Use professional photography settings: natural window light blended with soft studio fill, 85mm lens, f/2.0 bokeh
-4. Result: a polished, high-end corporate headshot suitable for LinkedIn and business profiles
+2. CRITICAL: Preserve the person's NATURAL facial expression from the reference photos — do NOT add a smile or change their expression
+3. Place the person in the EXACT office environment shown in the office reference photos (same walls, furniture, lighting setup, color palette)
+4. Photography style: natural window light blended with soft studio fill, 85mm lens, f/2.0 bokeh, full or 3/4 body framing
+5. Result: a polished, high-end corporate business photo suitable for LinkedIn, press materials, and company websites
 
 Generate ONLY the image prompt text. 2-3 sentences maximum.`;
 
@@ -290,7 +291,7 @@ Generate ONLY the image prompt text. 2-3 sentences maximum.`;
 }
 
 function getDefaultPrompt(): string {
-    return `Photorealistic professional corporate headshot. Preserve the person's exact face, skin tone, hair, and clothing from the reference photos. Place them in the exact office environment shown in the workspace reference photos. Natural window light with soft studio fill, 85mm f/2.0, warm professional color grading.`;
+    return `Photorealistic professional business photo session. Preserve the person's exact face, skin tone, hair, clothing, and NATURAL EXPRESSION from the reference photos — do not alter their expression. Place them in the exact office environment shown in the workspace reference photos. Natural window light with soft studio fill, 85mm f/2.0, warm professional color grading.`;
 }
 
 // ─── Generate one image with Gemini ──────────────────────────────────────────
@@ -321,7 +322,7 @@ async function generateOneImage(
     }
 
     parts.push({
-        text: `PHOTO STYLE: ${prompt}\n\nVARIATION: ${variation}\n\nGENERATE a single professional corporate headshot photo now. Must look like a real photograph — not an illustration or painting.`,
+        text: `PHOTO SESSION STYLE: ${prompt}\n\nVARIATION INSTRUCTIONS: ${variation}\n\nIMPORTANT: Do NOT invent or change the person's facial expression. Reproduce it exactly as it appears in the reference photos. If they look neutral, keep it neutral. If they are slightly smiling, keep that. This should look like a REAL professional business photo session — not a passport photo, not an illustration.`,
     });
 
     console.log(`[Gemini] Calling API for variation: ${variation}`);
