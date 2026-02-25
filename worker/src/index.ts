@@ -1,5 +1,6 @@
 /// <reference types="@cloudflare/workers-types" />
 import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from "cloudflare:workers";
+import { GoogleGenAI } from "@google/genai";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -300,8 +301,7 @@ async function generateOneImage(
     variation: string,
     faceImages: { base64: string; mimeType: string }[],
     officeImages: { base64: string; mimeType: string }[]
-): Promise<string | null> {
-    const { GoogleGenAI } = await import("@google/genai");
+): Promise<string> {  // throws on failure — workflow will retry
     const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 
     const parts: any[] = [];
@@ -321,24 +321,28 @@ async function generateOneImage(
     }
 
     parts.push({
-        text: `PHOTO STYLE: ${prompt}\n\nVARIATION: ${variation}\n\nGENERATE a single professional corporate headshot photo now. Must look like a real photograph taken by a professional photographer — not an illustration or painting.`,
+        text: `PHOTO STYLE: ${prompt}\n\nVARIATION: ${variation}\n\nGENERATE a single professional corporate headshot photo now. Must look like a real photograph — not an illustration or painting.`,
     });
 
-    try {
-        const response = await ai.models.generateContent({
-            model: "gemini-2.0-flash-preview-image-generation",
-            contents: [{ role: "user", parts }],
-            config: { responseModalities: ["TEXT", "IMAGE"] },
-        });
+    console.log(`[Gemini] Calling API for variation: ${variation}`);
 
-        for (const part of response.candidates?.[0]?.content?.parts ?? []) {
-            if (part.inlineData?.data) return part.inlineData.data;
+    // Throws on error — allows Workflow to retry the step
+    const response = await ai.models.generateContent({
+        model: "gemini-2.0-flash-preview-image-generation",
+        contents: [{ role: "user", parts }],
+        config: { responseModalities: ["TEXT", "IMAGE"] },
+    });
+
+    console.log(`[Gemini] Response candidates: ${response.candidates?.length ?? 0}`);
+
+    for (const part of response.candidates?.[0]?.content?.parts ?? []) {
+        if (part.inlineData?.data) {
+            console.log(`[Gemini] Got image data for variation: ${variation}`);
+            return part.inlineData.data;
         }
-    } catch (err) {
-        console.error(`Gemini generation failed for variation "${variation}":`, err);
     }
 
-    return null;
+    throw new Error(`Gemini returned no image for variation: ${variation}`);
 }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
