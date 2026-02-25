@@ -1,12 +1,17 @@
 name = "sesja-firmowa"
 main = "src/index.ts"
-compatibility_date = "2024-01-01"
+compatibility_date = "2026-02-25"
 compatibility_flags = ["nodejs_compat"]
 
 [[r2_buckets]]
 binding = "MEDIA_BUCKET"
 bucket_name = "sesja-firmowa-media"
 jurisdiction = "eu"
+
+[[workflows]]
+name = "sesja-firmowa-generation"
+binding = "GENERATION_WORKFLOW"
+class_name = "GenerationWorkflow"
 
 [vars]
 CLOUDFLARE_ACCOUNT_ID = "aff7fb06fb1cd82ef142281f4ee41b88"

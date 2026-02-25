@@ -19,6 +19,7 @@ export function SessionWizard() {
     const [hasCompleted, setHasCompleted] = useState(false);
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [resultUrls, setResultUrls] = useState<string[]>([]);
+    const [generationStatus, setGenerationStatus] = useState<string>("Inicjalizuję...");
     const { user, userProfile } = useAuth();
     const { currentPersona, currentOffice, addFaceReference, removeFaceReference, addOfficeReference, removeOfficeReference } = useAppStore();
 
@@ -169,9 +170,9 @@ export function SessionWizard() {
                                                     }
 
                                                     setIsGenerating(true);
+                                                    setGenerationStatus("Inicjalizuję sesję...");
 
                                                     try {
-                                                        // Save session first to get ID
                                                         const id = await sessionService.saveSession(user.uid, {
                                                             faceReferences: faceAssets.map(a => a.url),
                                                             officeReferences: officeAssets.map(a => a.url),
@@ -179,11 +180,9 @@ export function SessionWizard() {
                                                             status: "processing"
                                                         });
                                                         setSessionId(id);
-
-                                                        // Deduct credits
                                                         await userService.deductCredits(user.uid, cost);
 
-                                                        // Call generation API — pass R2 keys, not HTTP URLs
+                                                        setGenerationStatus("Uruchamiam workflow...");
                                                         const resp = await fetch("/api/generate", {
                                                             method: "POST",
                                                             headers: { "Content-Type": "application/json" },
@@ -196,18 +195,43 @@ export function SessionWizard() {
                                                         });
 
                                                         if (!resp.ok) {
-                                                            const err = await resp.json();
-                                                            throw new Error(err.error || "Generowanie nieudane");
+                                                            const err = await resp.json() as { error?: string };
+                                                            throw new Error(err.error || "Nie udało się uruchomić generowania");
                                                         }
 
-                                                        const result = await resp.json() as { resultUrls: string[] };
-                                                        const urls = result.resultUrls || [];
-                                                        setResultUrls(urls);
+                                                        const { instanceId } = await resp.json() as { instanceId: string };
+                                                        setGenerationStatus("Analizuję zdjęcia referencyjne...");
+                                                        let attempts = 0;
+                                                        const maxAttempts = 120;
 
-                                                        // Update session with results
-                                                        await sessionService.updateSession(id, {
-                                                            results: urls,
-                                                            status: "completed"
+                                                        await new Promise<void>((resolve, reject) => {
+                                                            const poll = setInterval(async () => {
+                                                                attempts++;
+                                                                try {
+                                                                    const sr = await fetch(`/api/status?instanceId=${encodeURIComponent(instanceId)}`);
+                                                                    const data = await sr.json() as { status: string; output?: { resultUrls: string[] }; error?: string };
+
+                                                                    if (attempts < 5) setGenerationStatus("Generuję opis fotograficzny...");
+                                                                    else if (attempts < 15) setGenerationStatus("Generuję fotografię 1/4...");
+                                                                    else if (attempts < 25) setGenerationStatus("Generuję fotografię 2/4...");
+                                                                    else if (attempts < 35) setGenerationStatus("Generuję fotografię 3/4...");
+                                                                    else setGenerationStatus("Generuję fotografię 4/4...");
+
+                                                                    if (data.status === "complete") {
+                                                                        clearInterval(poll);
+                                                                        const urls = data.output?.resultUrls ?? [];
+                                                                        setResultUrls(urls);
+                                                                        await sessionService.updateSession(id, { results: urls, status: "completed" });
+                                                                        resolve();
+                                                                    } else if (data.status === "errored" || data.status === "terminated") {
+                                                                        clearInterval(poll);
+                                                                        reject(new Error(data.error || "Workflow zakończony błędem"));
+                                                                    } else if (attempts >= maxAttempts) {
+                                                                        clearInterval(poll);
+                                                                        reject(new Error("Przekroczono czas oczekiwania"));
+                                                                    }
+                                                                } catch (e) { console.warn("Poll error:", e); }
+                                                            }, 3000);
                                                         });
 
                                                         setHasCompleted(true);
@@ -252,7 +276,7 @@ export function SessionWizard() {
                                                         className="h-full w-full bg-gradient-to-r from-transparent via-blue-500 to-transparent"
                                                     />
                                                 </div>
-                                                <p className="text-zinc-500 text-sm animate-pulse tracking-wide uppercase">Analiza rysów twarzy | Dopasowanie światła</p>
+                                                <p className="text-zinc-500 text-sm animate-pulse tracking-wide uppercase">{generationStatus}</p>
                                             </div>
                                         </div>
                                     </div>
