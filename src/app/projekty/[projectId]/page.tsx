@@ -129,52 +129,48 @@ export default function ProjectDetailsPage({ params }: { params: Promise<{ proje
             <main className="container mx-auto px-6 py-8">
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-10">
                     <div>
-                        <div className="flex items-center gap-3 mb-2">
-                            <div className="text-sm text-zinc-400 flex items-center gap-1.5">
-                                <Calendar className="h-3.5 w-3.5" />
-                                {project.createdAt?.toDate().toLocaleDateString('pl-PL')}
-                            </div>
+                        <div className="mb-12 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+                            {isEditingName ? (
+                                <div className="flex items-center gap-2 mt-2">
+                                    <Input
+                                        value={editNameValue}
+                                        onChange={(e) => setEditNameValue(e.target.value)}
+                                        className="text-2xl font-bold bg-black/20 border-white/20 text-white w-full max-w-sm h-12"
+                                        autoFocus
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') handleUpdateName();
+                                            if (e.key === 'Escape') setIsEditingName(false);
+                                        }}
+                                        disabled={isSavingName}
+                                    />
+                                    <Button size="icon" className="bg-emerald-600 hover:bg-emerald-700 h-12 w-12" onClick={handleUpdateName} disabled={isSavingName}>
+                                        {isSavingName ? <Loader2 className="h-5 w-5 animate-spin" /> : <Check className="h-5 w-5" />}
+                                    </Button>
+                                    <Button size="icon" variant="ghost" className="h-12 w-12 text-zinc-400 hover:bg-white/10 hover:text-white" onClick={() => setIsEditingName(false)} disabled={isSavingName}>
+                                        <X className="h-5 w-5" />
+                                    </Button>
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-3 group mt-2">
+                                    <h1 className="text-3xl font-bold tracking-tight">{project.name}</h1>
+                                    <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        className="h-8 w-8 text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/10 hover:text-white"
+                                        onClick={() => {
+                                            setEditNameValue(project.name);
+                                            setIsEditingName(true);
+                                        }}
+                                    >
+                                        <Pencil className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            )}
                         </div>
-                        {isEditingName ? (
-                            <div className="flex items-center gap-2 mt-2">
-                                <Input
-                                    value={editNameValue}
-                                    onChange={(e) => setEditNameValue(e.target.value)}
-                                    className="text-2xl font-bold bg-black/20 border-white/20 text-white w-full max-w-sm h-12"
-                                    autoFocus
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter') handleUpdateName();
-                                        if (e.key === 'Escape') setIsEditingName(false);
-                                    }}
-                                    disabled={isSavingName}
-                                />
-                                <Button size="icon" className="bg-emerald-600 hover:bg-emerald-700 h-12 w-12" onClick={handleUpdateName} disabled={isSavingName}>
-                                    {isSavingName ? <Loader2 className="h-5 w-5 animate-spin" /> : <Check className="h-5 w-5" />}
-                                </Button>
-                                <Button size="icon" variant="ghost" className="h-12 w-12 text-zinc-400 hover:bg-white/10 hover:text-white" onClick={() => setIsEditingName(false)} disabled={isSavingName}>
-                                    <X className="h-5 w-5" />
-                                </Button>
-                            </div>
-                        ) : (
-                            <div className="flex items-center gap-3 group mt-2">
-                                <h1 className="text-3xl font-bold tracking-tight">{project.name}</h1>
-                                <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    className="h-8 w-8 text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/10 hover:text-white"
-                                    onClick={() => {
-                                        setEditNameValue(project.name);
-                                        setIsEditingName(true);
-                                    }}
-                                >
-                                    <Pencil className="h-4 w-4" />
-                                </Button>
-                            </div>
-                        )}
                         <p className="text-zinc-400 mt-2">Sesje w ramach tego projektu</p>
                     </div>
 
-                    <div className="flex items-center gap-4">
+                    <div className="flex flex-wrap items-center gap-4">
                         <Link href="/generator">
                             <Button className="bg-blue-600 hover:bg-blue-700">
                                 Nowa sesja
@@ -184,7 +180,8 @@ export default function ProjectDetailsPage({ params }: { params: Promise<{ proje
                         <AlertDialog>
                             <AlertDialogTrigger asChild>
                                 <Button variant="destructive" className="bg-red-500/10 text-red-500 hover:bg-red-500/20 border-red-500/20">
-                                    <Trash2 className="h-4 w-4" />
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Usuń projekt
                                 </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent className="bg-[#0f172a] border-white/10 text-white">
@@ -216,10 +213,12 @@ export default function ProjectDetailsPage({ params }: { params: Promise<{ proje
                             <Camera className="h-8 w-8 text-zinc-500" />
                         </div>
                         <h2 className="text-xl font-semibold">Brak sesji w tym projekcie</h2>
-                        <p className="mt-2 mb-8 max-w-sm text-zinc-400">Rozpocznij tworzenie nowych zdjęć i wirtualnych biur, używając kreatora zawartego w tym projekcie.</p>
-                        <Link href="/generator">
-                            <Button className="bg-blue-600 hover:bg-blue-700">Uruchom kreator w tym projekcie</Button>
-                        </Link>
+                        <p className="mt-2 text-zinc-400">Rozpocznij tworzenie nowych zdjęć i wirtualnych biur, używając kreatora zawartego w tym projekcie.</p>
+                        <div className="mt-8">
+                            <Link href="/generator">
+                                <Button className="bg-blue-600 hover:bg-blue-700">Uruchom kreator nowej sesji</Button>
+                            </Link>
+                        </div>
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">

@@ -260,9 +260,15 @@ export default {
                 const instance = await env.GENERATION_WORKFLOW.get(instanceId);
                 const status = await instance.status();
 
+                let partialUrls: string[] = [];
+                if (status.status !== "complete") {
+                    const list = await env.MEDIA_BUCKET.list({ prefix: `results/${instanceId}/` });
+                    partialUrls = list.objects.map(o => `${WORKER_URL}/file?key=${encodeURIComponent(o.key)}`);
+                }
+
                 return new Response(JSON.stringify({
                     status: status.status,
-                    output: status.output ?? null,
+                    output: status.output ?? { resultUrls: partialUrls },
                     error: status.error ?? null,
                 }), {
                     headers: { ...CORS_HEADERS, "Content-Type": "application/json" },

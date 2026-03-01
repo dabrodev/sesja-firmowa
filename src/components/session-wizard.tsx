@@ -228,26 +228,30 @@ export function SessionWizard({ projectId }: { projectId?: string }) {
                                                                     else if (attempts < 35) setGenerationStatus("Generuję fotografię 3/4...");
                                                                     else setGenerationStatus("Generuję fotografię 4/4...");
 
+                                                                    if (data.output?.resultUrls?.length) {
+                                                                        const urls = data.output.resultUrls;
+                                                                        setResultUrls(urls);
+                                                                        if (!hasCompleted) setHasCompleted(true);
+                                                                    }
+
                                                                     if (data.status === "complete") {
                                                                         clearInterval(poll);
-                                                                        const urls = data.output?.resultUrls ?? [];
-                                                                        setResultUrls(urls);
-                                                                        await sessionService.updateSession(id, { results: urls, status: "completed" });
+                                                                        await sessionService.updateSession(id, { results: data.output?.resultUrls || [], status: "completed" });
+                                                                        setIsGenerating(false);
                                                                         resolve();
                                                                     } else if (data.status === "errored" || data.status === "terminated") {
                                                                         clearInterval(poll);
                                                                         const errStr = typeof data.error === 'object' ? JSON.stringify(data.error) : data.error;
+                                                                        setIsGenerating(false);
                                                                         reject(new Error(errStr || "Workflow zakończony błędem"));
                                                                     } else if (attempts >= maxAttempts) {
                                                                         clearInterval(poll);
+                                                                        setIsGenerating(false);
                                                                         reject(new Error("Przekroczono czas oczekiwania"));
                                                                     }
                                                                 } catch (e) { console.warn("Poll error:", e); }
                                                             }, 3000);
                                                         });
-
-                                                        setHasCompleted(true);
-                                                        setIsGenerating(false);
 
                                                     } catch (error: any) {
                                                         console.error("Failed to generate:", error);

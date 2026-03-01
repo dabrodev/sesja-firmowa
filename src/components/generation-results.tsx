@@ -32,14 +32,25 @@ export function GenerationResults({ sessionId, resultUrls = [] }: GenerationResu
                 </div>
             </div>
 
-            {resultUrls.length > 0 ? (
-                <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {resultUrls.map((url, i) => (
+            <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+                {Array.from({ length: 4 }).map((_, i) => {
+                    const url = resultUrls[i];
+
+                    if (!url) {
+                        return (
+                            <div key={`skeleton-${i}`} className="aspect-[3/4] rounded-2xl border border-white/5 bg-white/5 animate-pulse flex flex-col items-center justify-center">
+                                <span className="text-white/30 text-sm mb-2">Generowanie ({i + 1}/4)...</span>
+                                <div className="h-6 w-6 border-2 border-blue-500/50 border-t-blue-500 rounded-full animate-spin" />
+                            </div>
+                        );
+                    }
+
+                    return (
                         <motion.div
                             key={i}
                             initial={{ opacity: 0, scale: 0.95 }}
                             animate={{ opacity: 1, scale: 1 }}
-                            transition={{ delay: i * 0.15 }}
+                            transition={{ delay: 0.1 }}
                             className="group relative aspect-[3/4] overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 shadow-2xl cursor-pointer"
                             onClick={() => setSelectedImage(url)}
                         >
@@ -48,7 +59,7 @@ export function GenerationResults({ sessionId, resultUrls = [] }: GenerationResu
                                 alt={`Wynik ${i + 1}`}
                                 className="h-full w-full object-cover transition-all duration-500 group-hover:scale-105"
                                 onError={(e) => {
-                                    (e.target as HTMLImageElement).style.display = "none";
+                                    setTimeout(() => { (e.target as HTMLImageElement).src = url + "&retry=" + Date.now(); }, 2000);
                                 }}
                             />
                             <div className="absolute inset-0 bg-black/60 opacity-0 transition-opacity group-hover:opacity-100 flex items-center justify-center gap-4">
@@ -62,13 +73,9 @@ export function GenerationResults({ sessionId, resultUrls = [] }: GenerationResu
                                 </Button>
                             </div>
                         </motion.div>
-                    ))}
-                </div>
-            ) : (
-                <div className="text-center py-12 text-zinc-500">
-                    Ładowanie wyników...
-                </div>
-            )}
+                    );
+                })}
+            </div>
 
             <div className="flex justify-center pt-8">
                 <Button
