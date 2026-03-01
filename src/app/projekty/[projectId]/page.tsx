@@ -45,7 +45,7 @@ export default function ProjectDetailsPage({ params }: { params: Promise<{ proje
                 try {
                     const [projData, sessData] = await Promise.all([
                         projectService.getProjectById(projectId),
-                        sessionService.getSessionsByProjectId(projectId)
+                        sessionService.getSessionsByProjectId(projectId, user.uid)
                     ]);
 
                     if (!projData || projData.userId !== user.uid) {

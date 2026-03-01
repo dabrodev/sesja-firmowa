@@ -82,11 +82,12 @@ export const sessionService = {
         }
     },
 
-    async getSessionsByProjectId(projectId: string) {
+    async getSessionsByProjectId(projectId: string, userId: string) {
         try {
             const q = query(
                 collection(db, "sessions"),
-                where("projectId", "==", projectId)
+                where("projectId", "==", projectId),
+                where("userId", "==", userId)
             );
             const querySnapshot = await getDocs(q);
             const sessions = querySnapshot.docs.map(doc => ({
