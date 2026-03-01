@@ -223,9 +223,9 @@ export default function Home() {
         </section>
 
         {/* Problem Section */}
-        <section id="problem" className="py-32 px-6 border-t border-white/5 bg-black/40">
+        <section id="problem" className="py-16 md:py-32 px-6 border-t border-white/5 bg-black/40">
           <div className="container mx-auto">
-            <div className="mb-20 text-center">
+            <div className="mb-12 md:mb-20 text-center">
               <h2 className="text-3xl font-bold text-white md:text-5xl">Dlaczego tradycyjna sesja to koszmar?</h2>
               <p className="mt-4 text-white/40 text-lg italic">Organizacja profesjonalnych zdjęć to tygodnie stresu i logistyki.</p>
             </div>
@@ -243,8 +243,8 @@ export default function Home() {
                   viewport={{ once: true }}
                   transition={{ delay: i * 0.1, duration: 0.5 }}
                 >
-                  <Card className="border-white/5 bg-white/[0.02] backdrop-blur-md hover:border-blue-500/30 transition-all duration-500 py-4 group/card h-full">
-                    <CardContent className="p-8">
+                  <Card className="border-white/5 bg-white/[0.02] backdrop-blur-md hover:border-blue-500/30 transition-all duration-500 group/card h-full">
+                    <CardContent className="p-6 md:p-8">
                       <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/5 text-blue-500 border border-white/5 transition-colors group-hover/card:bg-blue-500/10 group-hover/card:text-blue-400">
                         {item.icon}
                       </div>
@@ -259,7 +259,7 @@ export default function Home() {
         </section>
 
         {/* Solution Section */}
-        <section id="solution" className="relative py-40 px-6 overflow-hidden">
+        <section id="solution" className="relative py-16 md:py-40 px-6 overflow-hidden">
           <div className="absolute top-1/2 left-0 -z-10 h-[500px] w-[500px] -translate-y-1/2 rounded-full bg-blue-600/10 blur-[150px]" />
 
           <div className="container mx-auto max-w-6xl">
@@ -337,9 +337,9 @@ export default function Home() {
         </section>
 
         {/* Showcase Gallery */}
-        <section id="gallery" className="py-24 px-6 bg-black/20">
+        <section id="gallery" className="py-16 md:py-24 px-6 bg-black/20">
           <div className="container mx-auto">
-            <div className="mb-16 text-center">
+            <div className="mb-10 md:mb-16 text-center">
               <h2 className="text-3xl font-bold text-white md:text-5xl">Sesja firmowa z AI — zobacz efekty</h2>
               <p className="mt-4 text-white/40 text-lg">Profesjonalna sesja biznesowa stworzona specjalnie dla twojej marki.</p>
             </div>
@@ -390,8 +390,8 @@ export default function Home() {
         </AnimatePresence>
 
         {/* Final CTA */}
-        <section id="cta" className="py-32 px-6">
-          <div className="container mx-auto max-w-4xl text-center border border-white/10 bg-gradient-to-b from-white/[0.03] to-transparent p-20 rounded-[48px] backdrop-blur-sm relative overflow-hidden">
+        <section id="cta" className="py-16 md:py-32 px-6">
+          <div className="container mx-auto max-w-4xl text-center border border-white/10 bg-gradient-to-b from-white/[0.03] to-transparent p-8 md:p-20 rounded-[32px] md:rounded-[48px] backdrop-blur-sm relative overflow-hidden">
             <div className="absolute top-0 left-1/2 -translate-x-1/2 h-1 w-64 bg-gradient-to-r from-transparent via-blue-500 to-transparent" />
             <h2 className="text-4xl md:text-6xl font-extrabold mb-8 tracking-tight">Gotowy na profesjonalny <br /> <span className="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">wizerunek biznesowy?</span></h2>
             <p className="text-white/40 text-xl mb-12 max-w-2xl mx-auto leading-relaxed">System AI czeka, by stworzyć twoją najlepszą sesję w historii. Bez wychodzenia z domu, bez zbędnych kosztów.</p>
