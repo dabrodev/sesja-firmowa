@@ -4,11 +4,12 @@ import { useEffect, useState, use } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { projectService, Project } from "@/lib/projects";
 import { sessionService, Photosession } from "@/lib/sessions";
-import { Camera, Calendar, ArrowRight, Loader2, ArrowLeft, Trash2 } from "lucide-react";
+import { Camera, Calendar, ArrowRight, Loader2, ArrowLeft, Trash2, Pencil, Check, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -29,6 +30,9 @@ export default function ProjectDetailsPage({ params }: { params: Promise<{ proje
     const [sessions, setSessions] = useState<Photosession[]>([]);
     const [loading, setLoading] = useState(true);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [isEditingName, setIsEditingName] = useState(false);
+    const [editNameValue, setEditNameValue] = useState("");
+    const [isSavingName, setIsSavingName] = useState(false);
 
     useEffect(() => {
         if (!authLoading && !user) {
@@ -74,6 +78,23 @@ export default function ProjectDetailsPage({ params }: { params: Promise<{ proje
         }
     };
 
+    const handleUpdateName = async () => {
+        if (!project || !editNameValue.trim() || editNameValue.trim() === project.name) {
+            setIsEditingName(false);
+            return;
+        }
+        setIsSavingName(true);
+        try {
+            await projectService.updateProject(project.id!, { name: editNameValue.trim() });
+            setProject({ ...project, name: editNameValue.trim() });
+            setIsEditingName(false);
+        } catch (error) {
+            console.error("Error updating project name:", error);
+        } finally {
+            setIsSavingName(false);
+        }
+    };
+
     if (authLoading || loading) {
         return (
             <div className="flex min-h-screen items-center justify-center bg-[#020617]">
@@ -87,14 +108,20 @@ export default function ProjectDetailsPage({ params }: { params: Promise<{ proje
     return (
         <div className="min-h-screen bg-[#020617] text-white selection:bg-blue-500/30 font-sans pb-20">
             <header className="border-b border-white/5 bg-black/20 backdrop-blur-xl sticky top-0 z-50">
-                <div className="container mx-auto flex h-16 items-center px-6">
-                    <Link href="/projekty">
-                        <Button variant="ghost" className="text-zinc-400 hover:text-white hover:bg-white/5 -ml-4 mr-4">
-                            <ArrowLeft className="mr-2 h-4 w-4" /> projekty
-                        </Button>
-                    </Link>
-                    <div className="flex items-center gap-2">
-                        <span className="text-lg font-bold tracking-tight">{project.name}</span>
+                <div className="container mx-auto flex h-16 items-center px-6 justify-between">
+                    <div className="flex items-center gap-4">
+                        <Link href="/projekty">
+                            <Button variant="ghost" className="text-zinc-400 hover:text-white hover:bg-white/5 -ml-4">
+                                <ArrowLeft className="mr-2 h-4 w-4" /> projekty
+                            </Button>
+                        </Link>
+                        <div className="flex items-center gap-2">
+                            <span className="text-lg font-bold tracking-tight">{project.name}</span>
+                        </div>
+                    </div>
+                    <div className="text-xs text-zinc-500 hidden sm:flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5" />
+                        utworzono {project.createdAt?.toDate().toLocaleDateString('pl-PL')}
                     </div>
                 </div>
             </header>
@@ -108,7 +135,42 @@ export default function ProjectDetailsPage({ params }: { params: Promise<{ proje
                                 {project.createdAt?.toDate().toLocaleDateString('pl-PL')}
                             </div>
                         </div>
-                        <h1 className="text-3xl font-bold tracking-tight">{project.name}</h1>
+                        {isEditingName ? (
+                            <div className="flex items-center gap-2 mt-2">
+                                <Input
+                                    value={editNameValue}
+                                    onChange={(e) => setEditNameValue(e.target.value)}
+                                    className="text-2xl font-bold bg-black/20 border-white/20 text-white w-full max-w-sm h-12"
+                                    autoFocus
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleUpdateName();
+                                        if (e.key === 'Escape') setIsEditingName(false);
+                                    }}
+                                    disabled={isSavingName}
+                                />
+                                <Button size="icon" className="bg-emerald-600 hover:bg-emerald-700 h-12 w-12" onClick={handleUpdateName} disabled={isSavingName}>
+                                    {isSavingName ? <Loader2 className="h-5 w-5 animate-spin" /> : <Check className="h-5 w-5" />}
+                                </Button>
+                                <Button size="icon" variant="ghost" className="h-12 w-12 text-zinc-400 hover:bg-white/10 hover:text-white" onClick={() => setIsEditingName(false)} disabled={isSavingName}>
+                                    <X className="h-5 w-5" />
+                                </Button>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-3 group mt-2">
+                                <h1 className="text-3xl font-bold tracking-tight">{project.name}</h1>
+                                <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-8 w-8 text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/10 hover:text-white"
+                                    onClick={() => {
+                                        setEditNameValue(project.name);
+                                        setIsEditingName(true);
+                                    }}
+                                >
+                                    <Pencil className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        )}
                         <p className="text-zinc-400 mt-2">Sesje w ramach tego projektu</p>
                     </div>
 

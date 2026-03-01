@@ -62,12 +62,12 @@ export default function Home() {
     <div className="min-h-screen bg-[#020617] text-white selection:bg-blue-500/30 font-sans">
       {/* Navigation */}
       <header className="fixed top-0 z-50 w-full border-b border-white/5 bg-black/20 backdrop-blur-xl">
-        <div className="container mx-auto flex h-16 items-center justify-between px-6">
+        <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 shadow-lg shadow-blue-500/20">
               <Camera className="h-5 w-5 text-white" />
             </div>
-            <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent">SesjaFirmowa.pl</span>
+            <span className="hidden sm:inline-block text-xl font-bold tracking-tight bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent">SesjaFirmowa.pl</span>
           </div>
 
           <NavigationMenu className="hidden md:flex">
@@ -147,7 +147,7 @@ export default function Home() {
               </Button>
             )}
             <Link href="/generator">
-              <Button className="bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-500/25 px-6">
+              <Button className="bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-500/25 px-4 sm:px-6">
                 uruchom kreator
               </Button>
             </Link>
