@@ -396,7 +396,7 @@ export default function Home() {
             <h2 className="text-4xl md:text-6xl font-extrabold mb-8 tracking-tight">Gotowy na profesjonalny <br /> <span className="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">wizerunek biznesowy?</span></h2>
             <p className="text-white/40 text-xl mb-12 max-w-2xl mx-auto leading-relaxed">System AI czeka, by stworzyć twoją najlepszą sesję w historii. Bez wychodzenia z domu, bez zbędnych kosztów.</p>
             <Link href="/generator">
-              <Button size="lg" className="h-16 border border-white/20 bg-gradient-to-br from-blue-600 to-indigo-700 px-12 text-xl font-black text-white hover:from-blue-500 hover:to-indigo-600 shadow-[0_0_30px_rgba(59,130,246,0.4)] uppercase tracking-widest transition-all hover:scale-105 active:scale-95">
+              <Button size="lg" className="h-16 border border-white/20 bg-gradient-to-br from-blue-600 to-indigo-700 px-6 md:px-12 text-base md:text-xl font-black text-white hover:from-blue-500 hover:to-indigo-600 shadow-[0_0_30px_rgba(59,130,246,0.4)] uppercase tracking-widest transition-all hover:scale-105 active:scale-95 w-full sm:w-auto">
                 rozpocznij teraz
               </Button>
             </Link>
