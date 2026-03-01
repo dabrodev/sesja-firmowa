@@ -181,7 +181,7 @@ export function SessionWizard({ projectId }: { projectId?: string }) {
                                                         // Ensure we have a project ID to attach this session to
                                                         let actualProjectId = projectId;
                                                         if (!actualProjectId) {
-                                                            actualProjectId = await projectService.createProject(user.uid, "Domyślny projekt");
+                                                            actualProjectId = await projectService.createProject(user.uid, "Mój pierwszy projekt");
                                                         }
 
                                                         const id = await sessionService.saveSession(user.uid, {

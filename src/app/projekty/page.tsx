@@ -68,7 +68,7 @@ export default function ProjectsPage() {
             if (orphanSessions.length > 0) {
                 console.log(`Found ${orphanSessions.length} orphaned sessions. Migrating to default project...`);
                 // Create a default project
-                const defaultProjectId = await projectService.createProject(user.uid, "Domyślny projekt");
+                const defaultProjectId = await projectService.createProject(user.uid, "Mój pierwszy projekt");
 
                 // Update all orphan sessions
                 await Promise.all(
