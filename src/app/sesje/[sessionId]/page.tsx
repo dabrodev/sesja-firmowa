@@ -9,9 +9,10 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { motion } from "framer-motion";
+import { cn } from "@/lib/utils";
 
-export default function SessionDetailsPage({ params }: { params: Promise<{ projectId: string, sessionId: string }> }) {
-    const { projectId, sessionId } = use(params);
+export default function SessionDetailsPage({ params }: { params: Promise<{ sessionId: string }> }) {
+    const { sessionId } = use(params);
     const { user, loading: authLoading } = useAuth();
     const router = useRouter();
     const [session, setSession] = useState<Photosession | null>(null);
@@ -19,7 +20,7 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ proje
 
     useEffect(() => {
         if (!authLoading && !user) {
-            router.push(`/login?callbackUrl=/projekty/${projectId}/sesja/${sessionId}`);
+            router.push(`/login?callbackUrl=/sesje/${sessionId}`);
             return;
         }
 
@@ -28,20 +29,20 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ proje
                 try {
                     const data = await sessionService.getSessionById(sessionId);
                     if (!data || data.userId !== user.uid) {
-                        router.push(`/projekty/${projectId}`);
+                        router.push(`/sesje`);
                         return;
                     }
                     setSession(data);
                 } catch (error) {
                     console.error("Error fetching session:", error);
-                    router.push(`/projekty/${projectId}`);
+                    router.push(`/sesje`);
                 } finally {
                     setLoading(false);
                 }
             };
             fetchSession();
         }
-    }, [user, authLoading, router, projectId, sessionId]);
+    }, [user, authLoading, router, sessionId]);
 
     const handleDownload = async (url: string, index: number) => {
         try {
@@ -76,9 +77,9 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ proje
         <div className="min-h-screen bg-[#020617] text-white selection:bg-blue-500/30 font-sans pb-20">
             <header className="border-b border-white/5 bg-black/20 backdrop-blur-xl sticky top-0 z-50">
                 <div className="container mx-auto flex h-16 items-center px-6">
-                    <Link href={`/projekty/${projectId}`}>
+                    <Link href={`/sesje`}>
                         <Button variant="ghost" className="text-zinc-400 hover:text-white hover:bg-white/5 -ml-4 mr-4">
-                            <ArrowLeft className="mr-2 h-4 w-4" /> projekt
+                            <ArrowLeft className="mr-2 h-4 w-4" /> wszystkie sesje
                         </Button>
                     </Link>
                     <div className="flex items-center gap-2">
@@ -95,7 +96,10 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ proje
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-10">
                     <div>
                         <div className="flex items-center gap-3 mb-2">
-                            <span className="inline-flex items-center rounded-full bg-blue-500/10 px-2.5 py-0.5 text-xs font-semibold text-blue-400 border border-blue-500/20 uppercase tracking-wider">
+                            <span className={cn(
+                                "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider border",
+                                session.status === 'completed' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                            )}>
                                 {session.status === 'completed' ? 'Ukończono' : session.status}
                             </span>
                             <div className="text-sm text-zinc-400 flex items-center gap-1.5">
@@ -105,6 +109,13 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ proje
                         </div>
                         <h1 className="text-3xl font-bold tracking-tight">Twoja sesja biznesowa</h1>
                         <p className="text-zinc-500 text-sm mt-1 font-mono">ID: {session.id}</p>
+                    </div>
+                    <div className="flex-shrink-0">
+                        <Link href={`/generator?sessionId=${session.id}`}>
+                            <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-lg shadow-blue-500/20">
+                                Dogeneruj +4 zdjęcia
+                            </Button>
+                        </Link>
                     </div>
                 </div>
 
