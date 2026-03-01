@@ -236,7 +236,8 @@ export function SessionWizard({ projectId }: { projectId?: string }) {
                                                                         resolve();
                                                                     } else if (data.status === "errored" || data.status === "terminated") {
                                                                         clearInterval(poll);
-                                                                        reject(new Error(data.error || "Workflow zakończony błędem"));
+                                                                        const errStr = typeof data.error === 'object' ? JSON.stringify(data.error) : data.error;
+                                                                        reject(new Error(errStr || "Workflow zakończony błędem"));
                                                                     } else if (attempts >= maxAttempts) {
                                                                         clearInterval(poll);
                                                                         reject(new Error("Przekroczono czas oczekiwania"));
