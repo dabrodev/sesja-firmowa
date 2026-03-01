@@ -61,7 +61,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-[#020617] text-white selection:bg-blue-500/30 font-sans">
       {/* Navigation */}
-      <header className="fixed top-0 z-50 w-full border-b border-white/5 bg-black/20 backdrop-blur-xl">
+      <header className="fixed top-0 z-50 w-full border-b border-white/5 bg-black/20 backdrop-blur-xl pt-safe sm:pt-0">
         <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-1.5 sm:gap-2">
             <div className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 shadow-lg shadow-blue-500/20">
