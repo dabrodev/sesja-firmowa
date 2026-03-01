@@ -63,11 +63,11 @@ export default function Home() {
       {/* Navigation */}
       <header className="fixed top-0 z-50 w-full border-b border-white/5 bg-black/20 backdrop-blur-xl">
         <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-6">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 shadow-lg shadow-blue-500/20">
-              <Camera className="h-5 w-5 text-white" />
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <div className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 shadow-lg shadow-blue-500/20">
+              <Camera className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
             </div>
-            <span className="hidden sm:inline-block text-xl font-bold tracking-tight bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent">SesjaFirmowa.pl</span>
+            <span className="text-lg sm:text-xl font-bold tracking-tight bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent">SesjaFirmowa.pl</span>
           </div>
 
           <NavigationMenu className="hidden md:flex">
@@ -89,7 +89,7 @@ export default function Home() {
             </NavigationMenuList>
           </NavigationMenu>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             {user && userProfile && (
               <div className="mr-2 hidden items-center gap-2 rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1 text-sm font-medium sm:flex">
                 <Coins className="h-4 w-4 text-blue-400" />
@@ -102,8 +102,8 @@ export default function Home() {
             ) : user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0">
-                    <Avatar className="h-9 w-9">
+                  <Button variant="ghost" className="relative h-8 w-8 sm:h-9 sm:w-9 rounded-full p-0">
+                    <Avatar className="h-8 w-8 sm:h-9 sm:w-9">
                       <AvatarImage src={user.photoURL || ""} alt={user.displayName || ""} />
                       <AvatarFallback className="bg-blue-600 text-white">
                         {user.displayName?.charAt(0) || user.email?.charAt(0)}
@@ -140,15 +140,15 @@ export default function Home() {
             ) : (
               <Button
                 variant="ghost"
-                className="text-white/70 hover:bg-white/5 hover:text-white"
+                className="text-white/70 hover:bg-white/5 hover:text-white px-2 sm:px-4 text-xs sm:text-sm"
                 onClick={() => router.push("/login")}
               >
                 Zaloguj
               </Button>
             )}
             <Link href="/generator">
-              <Button className="bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-500/25 px-4 sm:px-6">
-                uruchom kreator
+              <Button className="bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-500/25 px-3 sm:px-6 h-8 sm:h-10 text-xs sm:text-sm">
+                <span className="hidden sm:inline">uruchom </span>kreator
               </Button>
             </Link>
           </div>
