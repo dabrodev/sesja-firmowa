@@ -63,12 +63,12 @@ export default function Home() {
       {/* Navigation */}
       <header className="fixed top-0 z-50 w-full border-b border-white/5 bg-black/20 backdrop-blur-xl pt-safe sm:pt-0">
         <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-6">
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          <Link href="/" className="flex items-center gap-1.5 sm:gap-2 hover:opacity-80 transition-opacity">
             <div className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 shadow-lg shadow-blue-500/20">
               <Camera className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
             </div>
             <span className="text-lg sm:text-xl font-bold tracking-tight bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent">SesjaFirmowa.pl</span>
-          </div>
+          </Link>
 
           <NavigationMenu className="hidden md:flex">
             <NavigationMenuList className="gap-2">
