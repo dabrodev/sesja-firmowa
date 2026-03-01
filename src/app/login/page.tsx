@@ -1,25 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Camera, Github, Loader2, Mail } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export default function LoginPage() {
+function LoginContent() {
     const { loginWithGoogle, signInWithEmail } = useAuth();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const callbackUrl = searchParams.get("callbackUrl") || "/generator";
 
     const handleGoogleLogin = async () => {
         try {
             setLoading(true);
             await loginWithGoogle();
-            router.push("/generator");
+            router.push(callbackUrl);
         } catch (err) {
             setError("Logowanie przez Google nie powiodło się.");
         } finally {
@@ -33,7 +35,7 @@ export default function LoginPage() {
             setLoading(true);
             setError("");
             await signInWithEmail(email, password);
-            router.push("/generator");
+            router.push(callbackUrl);
         } catch (err: any) {
             setError("Nieprawidłowy e-mail lub hasło.");
         } finally {
@@ -117,11 +119,19 @@ export default function LoginPage() {
 
                 <p className="text-center text-sm text-zinc-400">
                     Nie masz konta?{" "}
-                    <Link href="/signup" className="text-blue-400 hover:text-blue-300 font-medium transition-colors">
+                    <Link href={`/signup?callbackUrl=${encodeURIComponent(callbackUrl)}`} className="text-blue-400 hover:text-blue-300 font-medium transition-colors">
                         Zarejestruj się
                     </Link>
                 </p>
             </div>
         </div>
+    );
+}
+
+export default function LoginPage() {
+    return (
+        <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-[#020617]"><Loader2 className="h-8 w-8 animate-spin text-blue-500" /></div>}>
+            <LoginContent />
+        </Suspense>
     );
 }

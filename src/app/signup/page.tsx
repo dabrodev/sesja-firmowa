@@ -1,25 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Camera, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export default function SignUpPage() {
+function SignUpContent() {
     const { loginWithGoogle, signUpWithEmail } = useAuth();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const callbackUrl = searchParams.get("callbackUrl") || "/generator";
 
     const handleGoogleLogin = async () => {
         try {
             setLoading(true);
             await loginWithGoogle();
-            router.push("/generator");
+            router.push(callbackUrl);
         } catch (err) {
             setError("Rejestracja przez Google nie powiodła się.");
         } finally {
@@ -37,7 +39,7 @@ export default function SignUpPage() {
             setLoading(true);
             setError("");
             await signUpWithEmail(email, password);
-            router.push("/generator");
+            router.push(callbackUrl);
         } catch (err: any) {
             if (err.code === "auth/email-already-in-use") {
                 setError("Ten e-mail jest już w użyciu.");
@@ -122,11 +124,19 @@ export default function SignUpPage() {
 
                 <p className="text-center text-sm text-zinc-400">
                     Masz już konto?{" "}
-                    <Link href="/login" className="text-blue-400 hover:text-blue-300 font-medium transition-colors">
+                    <Link href={`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`} className="text-blue-400 hover:text-blue-300 font-medium transition-colors">
                         Zaloguj się
                     </Link>
                 </p>
             </div>
         </div>
+    );
+}
+
+export default function SignUpPage() {
+    return (
+        <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-[#020617]"><Loader2 className="h-8 w-8 animate-spin text-blue-500" /></div>}>
+            <SignUpContent />
+        </Suspense>
     );
 }
