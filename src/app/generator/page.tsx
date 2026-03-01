@@ -33,6 +33,15 @@ const staggerContainer = {
     }
 };
 
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+
+function WizardWrapper() {
+    const searchParams = useSearchParams();
+    const projectId = searchParams.get("projectId") || undefined;
+    return <SessionWizard projectId={projectId} />;
+}
+
 export default function App() {
     const { user, userProfile, loading, logout } = useAuth();
     const router = useRouter();
@@ -159,7 +168,9 @@ export default function App() {
                             transition={{ duration: 0.8, delay: 0.4 }}
                             className="w-full max-w-5xl mx-auto"
                         >
-                            <SessionWizard />
+                            <Suspense fallback={<div className="h-64 flex items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" /></div>}>
+                                <WizardWrapper />
+                            </Suspense>
                         </motion.div>
                     </section>
                 </BetaGuard>

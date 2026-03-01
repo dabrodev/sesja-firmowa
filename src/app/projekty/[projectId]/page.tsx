@@ -171,7 +171,7 @@ export default function ProjectDetailsPage({ params }: { params: Promise<{ proje
                     </div>
 
                     <div className="flex flex-wrap items-center gap-4">
-                        <Link href="/generator">
+                        <Link href={`/generator?projectId=${project.id}`}>
                             <Button className="bg-blue-600 hover:bg-blue-700">
                                 Nowa sesja
                             </Button>
@@ -215,7 +215,7 @@ export default function ProjectDetailsPage({ params }: { params: Promise<{ proje
                         <h2 className="text-xl font-semibold">Brak sesji w tym projekcie</h2>
                         <p className="mt-2 text-zinc-400">Rozpocznij tworzenie nowych zdjęć i wirtualnych biur, używając kreatora zawartego w tym projekcie.</p>
                         <div className="mt-8">
-                            <Link href="/generator">
+                            <Link href={`/generator?projectId=${project.id}`}>
                                 <Button className="bg-blue-600 hover:bg-blue-700">Uruchom kreator nowej sesji</Button>
                             </Link>
                         </div>
