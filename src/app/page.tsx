@@ -122,6 +122,9 @@ export default function Home() {
                   <DropdownMenuItem className="focus:bg-white/5 focus:text-white cursor-pointer" asChild>
                     <Link href="/projekty">moje projekty</Link>
                   </DropdownMenuItem>
+                  <DropdownMenuItem className="focus:bg-white/5 focus:text-white cursor-pointer" asChild>
+                    <Link href="/wolny-generator">wolny generator</Link>
+                  </DropdownMenuItem>
                   <DropdownMenuItem className="focus:bg-white/5 focus:text-white cursor-pointer">
                     ustawienia
                   </DropdownMenuItem>

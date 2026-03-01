@@ -170,6 +170,84 @@ export default {
             }
         }
 
+        // Generate a custom image directly without workflow
+        if (url.pathname === "/generate-custom") {
+            if (request.method !== "POST") {
+                return new Response("Method not allowed", { status: 405, headers: CORS_HEADERS });
+            }
+            try {
+                const body = await request.json() as { prompt: string; referenceKeys?: string[] };
+                const { prompt, referenceKeys } = body;
+
+                if (!prompt) {
+                    return new Response(JSON.stringify({ error: "Missing required field: prompt" }), {
+                        status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+                    });
+                }
+
+                console.log(`[Custom Generator] Prompt: ${prompt}, References: ${referenceKeys?.length || 0}`);
+                const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
+
+                // Fetch reference images if provided
+                let refImages: { base64: string; mimeType: string }[] = [];
+                if (referenceKeys && referenceKeys.length > 0) {
+                    refImages = await fetchImagesFromR2(env, referenceKeys);
+                }
+
+                // Append the requested 5:4 aspect ratio directive to the prompt
+                const finalPrompt = `${prompt}\n\n[Instruction: Create image in 5:4 aspect ratio]`;
+
+                const parts: any[] = [{ text: finalPrompt }];
+                if (refImages.length > 0) {
+                    parts.push({ text: `\nREFERENCE PHOTOS (${refImages.length} images):\nPlease use these images as a visual reference for the subject, style, or composition as described in the prompt.` });
+                    for (const img of refImages) {
+                        parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
+                    }
+                }
+
+                const response = await ai.models.generateContent({
+                    model: "gemini-3.1-flash-image-preview",
+                    contents: [{ role: "user", parts }],
+                    config: {
+                        responseModalities: ["TEXT", "IMAGE"],
+                        // Gemini's generateContent doesn't natively expose image aspect ratio in the base config,
+                        // but sometimes setting it in output configs works. We enforce it in the prompt above.
+                    },
+                });
+
+                let base64Image = null;
+                for (const part of response.candidates?.[0]?.content?.parts ?? []) {
+                    if (part.inlineData?.data) {
+                        base64Image = part.inlineData.data;
+                        break;
+                    }
+                }
+
+                if (!base64Image) {
+                    throw new Error("Gemini returned no image for the custom prompt");
+                }
+
+                // Save to R2
+                const key = `uploads/custom-${Date.now()}.jpg`;
+                const imageData = base64ToArrayBuffer(base64Image);
+                await env.MEDIA_BUCKET.put(key, imageData, {
+                    httpMetadata: { contentType: "image/jpeg" },
+                });
+
+                const workerUrl = WORKER_URL;
+                const publicUrl = `${workerUrl}/file?key=${encodeURIComponent(key)}`;
+
+                return new Response(JSON.stringify({ url: publicUrl, success: true }), {
+                    status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+                });
+            } catch (error: any) {
+                console.error("Custom generation error:", error);
+                return new Response(JSON.stringify({ error: error.message }), {
+                    status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+                });
+            }
+        }
+
         // Poll workflow status
         if (url.pathname === "/status") {
             const instanceId = url.searchParams.get("instanceId");
@@ -329,7 +407,7 @@ async function generateOneImage(
 
     // Throws on error — allows Workflow to retry the step
     const response = await ai.models.generateContent({
-        model: "gemini-3-pro-image-preview",
+        model: "gemini-3.1-flash-image-preview",
         contents: [{ role: "user", parts }],
         config: { responseModalities: ["TEXT", "IMAGE"] },
     });

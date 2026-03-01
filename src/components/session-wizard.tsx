@@ -11,9 +11,10 @@ import { GenerationResults } from "@/components/generation-results";
 import { useAuth } from "@/components/auth-provider";
 import { sessionService } from "@/lib/sessions";
 import { userService } from "@/lib/users";
+import { projectService } from "@/lib/projects";
 import { cn } from "@/lib/utils";
 
-export function SessionWizard() {
+export function SessionWizard({ projectId }: { projectId?: string }) {
     const [step, setStep] = useState<"face" | "office" | "generate">("face");
     const [isGenerating, setIsGenerating] = useState(false);
     const [hasCompleted, setHasCompleted] = useState(false);
@@ -77,6 +78,8 @@ export function SessionWizard() {
                                     onUpload={addFaceReference}
                                     onRemove={removeFaceReference}
                                     maxFiles={10}
+                                    userId={user?.uid!}
+                                    assetType="face"
                                 />
                                 <div className="flex justify-end">
                                     <Button
@@ -105,6 +108,8 @@ export function SessionWizard() {
                                     onUpload={addOfficeReference}
                                     onRemove={removeOfficeReference}
                                     maxFiles={5}
+                                    userId={user?.uid!}
+                                    assetType="office"
                                 />
                                 <div className="flex justify-between">
                                     <Button variant="ghost" onClick={() => setStep("face")} className="text-zinc-400 hover:bg-white/5">
@@ -173,12 +178,18 @@ export function SessionWizard() {
                                                     setGenerationStatus("Inicjalizuję sesję...");
 
                                                     try {
+                                                        // Ensure we have a project ID to attach this session to
+                                                        let actualProjectId = projectId;
+                                                        if (!actualProjectId) {
+                                                            actualProjectId = await projectService.createProject(user.uid, "Domyślny projekt");
+                                                        }
+
                                                         const id = await sessionService.saveSession(user.uid, {
                                                             faceReferences: faceAssets.map(a => a.url),
                                                             officeReferences: officeAssets.map(a => a.url),
                                                             results: [],
                                                             status: "processing"
-                                                        });
+                                                        }, actualProjectId);
                                                         setSessionId(id);
                                                         await userService.deductCredits(user.uid, cost);
 
