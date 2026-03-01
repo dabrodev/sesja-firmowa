@@ -73,11 +73,11 @@ export function SessionWizard({ projectId }: { projectId?: string }) {
                             >
                                 <PhotoUploader
                                     title="Twoje zdjęcie referencyjne"
-                                    description="Wgraj 1 wyraźne zdjęcie swojej twarzy. Dzięki temu AI nauczy się Twoich rysów i idealnie dopasuje je do sesji."
+                                    description="Wgraj minimum 1 wyraźne zdjęcie swojej twarzy. Im więcej zdjęć (maks 10), tym lepiej AI nauczy się Twoich rysów i idealnie dopasuje je do sesji."
                                     assets={faceAssets}
                                     onUpload={addFaceReference}
                                     onRemove={removeFaceReference}
-                                    maxFiles={1}
+                                    maxFiles={10}
                                     userId={user?.uid!}
                                     assetType="face"
                                 />
