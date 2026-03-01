@@ -28,7 +28,7 @@ export function SessionWizard({ projectId }: { projectId?: string }) {
     const officeAssets = currentOffice?.officeReferences || [];
 
     const steps = [
-        { id: "face", label: "Wizerunek", icon: <User className="h-4 w-4" />, completed: faceAssets.length >= 3 },
+        { id: "face", label: "Wizerunek", icon: <User className="h-4 w-4" />, completed: faceAssets.length >= 1 },
         { id: "office", label: "Biuro", icon: <Building2 className="h-4 w-4" />, completed: officeAssets.length >= 1 },
         { id: "generate", label: "Generuj", icon: <Sparkles className="h-4 w-4" />, completed: hasCompleted }
     ];
@@ -72,18 +72,18 @@ export function SessionWizard({ projectId }: { projectId?: string }) {
                                 className="space-y-8"
                             >
                                 <PhotoUploader
-                                    title="Twoje zdjęcia referencyjne"
-                                    description="Wgraj minimum 3 wyraźne zdjęcia swojej twarzy. Dzięki temu AI nauczy się Twoich rysów i idealnie dopasuje je do sesji."
+                                    title="Twoje zdjęcie referencyjne"
+                                    description="Wgraj 1 wyraźne zdjęcie swojej twarzy. Dzięki temu AI nauczy się Twoich rysów i idealnie dopasuje je do sesji."
                                     assets={faceAssets}
                                     onUpload={addFaceReference}
                                     onRemove={removeFaceReference}
-                                    maxFiles={10}
+                                    maxFiles={1}
                                     userId={user?.uid!}
                                     assetType="face"
                                 />
                                 <div className="flex justify-end">
                                     <Button
-                                        disabled={faceAssets.length < 3}
+                                        disabled={faceAssets.length < 1}
                                         onClick={() => setStep("office")}
                                         className="bg-blue-600 hover:bg-blue-700 h-12 px-8 shadow-lg shadow-blue-500/20"
                                     >
