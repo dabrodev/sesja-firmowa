@@ -38,8 +38,32 @@ import { Suspense } from "react";
 
 function WizardWrapper() {
     const searchParams = useSearchParams();
-    const projectId = searchParams.get("projectId") || undefined;
-    return <SessionWizard projectId={projectId} />;
+    const sessionIdParam = searchParams.get("sessionId") || undefined;
+    const { user } = useAuth();
+    const [sessionId, setSessionId] = React.useState<string | undefined>(sessionIdParam);
+    const [isDeterminingSession, setIsDeterminingSession] = React.useState(!sessionIdParam);
+
+    React.useEffect(() => {
+        if (user && !sessionIdParam) {
+            import("@/lib/sessions").then(({ sessionService }) => {
+                sessionService.getUserSessions(user.uid).then(sessions => {
+                    if (sessions.length > 0) {
+                        setSessionId(sessions[0].id);
+                    }
+                    setIsDeterminingSession(false);
+                }).catch(err => {
+                    console.error("Failed to determine last session", err);
+                    setIsDeterminingSession(false);
+                });
+            });
+        }
+    }, [user, sessionIdParam]);
+
+    if (isDeterminingSession) {
+        return <div className="h-64 flex items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" /></div>;
+    }
+
+    return <SessionWizard sessionId={sessionId} onNewSessionRequested={() => setSessionId(undefined)} />;
 }
 
 export default function App() {

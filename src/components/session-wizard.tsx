@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { User, Building2, Sparkles, ChevronRight, ChevronLeft, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,20 +9,30 @@ import { useAppStore } from "@/lib/store";
 import { PhotoUploader } from "@/components/photo-uploader";
 import { GenerationResults } from "@/components/generation-results";
 import { useAuth } from "@/components/auth-provider";
-import { sessionService } from "@/lib/sessions";
+import { sessionService, Photosession } from "@/lib/sessions";
 import { userService } from "@/lib/users";
-import { projectService } from "@/lib/projects";
 import { cn } from "@/lib/utils";
+import { CopyPlus } from "lucide-react";
 
-export function SessionWizard({ projectId }: { projectId?: string }) {
+export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequested }: { sessionId?: string, onNewSessionRequested?: () => void }) {
     const [step, setStep] = useState<"face" | "office" | "generate">("face");
     const [isGenerating, setIsGenerating] = useState(false);
     const [hasCompleted, setHasCompleted] = useState(false);
-    const [sessionId, setSessionId] = useState<string | null>(null);
+    const [sessionId, setSessionId] = useState<string | null>(initialSessionId || null);
     const [resultUrls, setResultUrls] = useState<string[]>([]);
     const [generationStatus, setGenerationStatus] = useState<string>("Inicjalizuję...");
+    const [sessionData, setSessionData] = useState<Photosession | null>(null);
     const { user, userProfile } = useAuth();
     const { currentPersona, currentOffice, addFaceReference, removeFaceReference, addOfficeReference, removeOfficeReference } = useAppStore();
+
+    useEffect(() => {
+        if (initialSessionId) {
+            setSessionId(initialSessionId);
+            sessionService.getSessionById(initialSessionId).then(data => {
+                if (data) setSessionData(data);
+            });
+        }
+    }, [initialSessionId]);
 
     const faceAssets = currentPersona?.faceReferences || [];
     const officeAssets = currentOffice?.officeReferences || [];
@@ -144,9 +154,13 @@ export function SessionWizard({ projectId }: { projectId?: string }) {
                                             <Sparkles className="h-10 w-10 animate-pulse" />
                                         </motion.div>
                                         <div>
-                                            <h2 className="text-3xl font-bold text-white tracking-tight">Gotowy na sesję AI?</h2>
+                                            <h2 className="text-3xl font-bold text-white tracking-tight">
+                                                {sessionData ? "Dogeneruj zdjęcia do wskazanej sesji!" : "Gotowy na sesję AI?"}
+                                            </h2>
                                             <p className="mx-auto mt-4 max-w-md text-zinc-400 leading-relaxed">
-                                                Wszystkie dane zostały przygotowane. System AI przeanalizuje twoje rysy i stworzy fotorealistyczną sesję w wybranych wnętrzach.
+                                                {sessionData
+                                                    ? `Kreator jest w trybie kontynuacji sesji "${sessionData.name}". Za chwilę dołożymy kolejne 4 ujęcia w podanym biurze z Twoim wizerunkiem.`
+                                                    : "Wszystkie dane zostały przygotowane. System AI przeanalizuje twoje rysy i stworzy fotorealistyczną sesję w wybranych wnętrzach."}
                                             </p>
                                         </div>
 
@@ -178,19 +192,20 @@ export function SessionWizard({ projectId }: { projectId?: string }) {
                                                     setGenerationStatus("Inicjalizuję sesję...");
 
                                                     try {
-                                                        // Ensure we have a project ID to attach this session to
-                                                        let actualProjectId = projectId;
-                                                        if (!actualProjectId) {
-                                                            actualProjectId = await projectService.createProject(user.uid, "Mój pierwszy projekt");
-                                                        }
+                                                        let id = sessionId;
 
-                                                        const id = await sessionService.saveSession(user.uid, {
-                                                            faceReferences: faceAssets.map(a => a.url),
-                                                            officeReferences: officeAssets.map(a => a.url),
-                                                            results: [],
-                                                            status: "processing"
-                                                        }, actualProjectId);
-                                                        setSessionId(id);
+                                                        if (!id) {
+                                                            id = await sessionService.saveSession(user.uid, {
+                                                                faceReferences: faceAssets.map(a => a.url),
+                                                                officeReferences: officeAssets.map(a => a.url),
+                                                                results: [],
+                                                                status: "processing",
+                                                                name: "" // backend will auto-assign "Sesja X (Data)"
+                                                            });
+                                                            setSessionId(id);
+                                                        } else {
+                                                            await sessionService.updateSession(id, { status: "processing" });
+                                                        }
                                                         await userService.deductCredits(user.uid, cost);
 
                                                         setGenerationStatus("Uruchamiam workflow...");
@@ -236,7 +251,12 @@ export function SessionWizard({ projectId }: { projectId?: string }) {
 
                                                                     if (data.status === "complete") {
                                                                         clearInterval(poll);
-                                                                        await sessionService.updateSession(id, { results: data.output?.resultUrls || [], status: "completed" });
+                                                                        // Depending on logic, we append rather than overwrite
+                                                                        if (sessionId) {
+                                                                            await sessionService.appendResults(id!, data.output?.resultUrls || []);
+                                                                        } else {
+                                                                            await sessionService.updateSession(id!, { results: data.output?.resultUrls || [], status: "completed" });
+                                                                        }
                                                                         setIsGenerating(false);
                                                                         resolve();
                                                                     } else if (data.status === "errored" || data.status === "terminated") {
@@ -261,8 +281,19 @@ export function SessionWizard({ projectId }: { projectId?: string }) {
                                                 }}
                                                 className="h-16 w-64 bg-gradient-to-br from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 text-xl font-bold shadow-2xl shadow-blue-500/30 transition-all hover:scale-105 active:scale-95 rounded-2xl text-white border border-white/10"
                                             >
-                                                rozpocznij generowanie
+                                                {isGenerating ? (
+                                                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/20 border-t-white mr-2" />
+                                                ) : null}
+                                                {sessionData ? "Dogeneruj +4 zdjęcia" : "Rozpocznij generowanie"}
                                             </Button>
+
+                                            {sessionData && onNewSessionRequested && (
+                                                <Button variant="ghost" className="text-zinc-400 hover:text-white" onClick={onNewSessionRequested}>
+                                                    <CopyPlus className="w-4 h-4 mr-2" />
+                                                    Chcę utworzyć całkowicie nową sesję
+                                                </Button>
+                                            )}
+
                                             <p className="text-xs text-zinc-500">koszt: 120 PKT za 4 fotografie AI</p>
                                             <Button variant="ghost" onClick={() => setStep("office")} className="text-zinc-500 hover:text-white transition-colors">
                                                 <ChevronLeft className="mr-2 h-4 w-4" /> Wróć do edycji parametrów
