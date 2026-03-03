@@ -101,6 +101,12 @@ function shouldPrioritizeOutfit(customPrompt: string, outfitCount: number): bool
     ].some((keyword) => normalized.includes(keyword)) || outfitCount > 0;
 }
 
+function buildWorkflowInstanceId(sessionId: string, runId: string): string {
+    const safeSessionId = sessionId.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const safeRunId = runId.replace(/[^a-zA-Z0-9_-]/g, "_");
+    return `${safeSessionId}-${safeRunId}-${crypto.randomUUID()}`;
+}
+
 // ─── Cloudflare Workflow ──────────────────────────────────────────────────────
 
 export class GenerationWorkflow extends WorkflowEntrypoint<Env, GenerateParams> {
@@ -267,7 +273,7 @@ const workerHandler = {
                     typeof runId === "string" && runId.trim().length > 0
                         ? runId.trim()
                         : Date.now().toString();
-                const workflowInstanceId = `${sessionId}-${normalizedRunId}`;
+                const workflowInstanceId = buildWorkflowInstanceId(sessionId, normalizedRunId);
 
                 if (
                     !sessionId ||
