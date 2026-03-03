@@ -36,9 +36,10 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
     const [outfitReferencesDraft, setOutfitReferencesDraft] = useState<PhotoAsset[]>([]);
     const [customPromptDraft, setCustomPromptDraft] = useState("");
     const [requestedCountDraft, setRequestedCountDraft] = useState(4);
+    const [isSyncingResults, setIsSyncingResults] = useState(false);
 
     useEffect(() => {
-        if (!session?.id || !user || session.status !== "processing") {
+        if (!session?.id || !user || session.results.length > 0 || session.status === "failed") {
             return;
         }
         const activeSessionId = session.id;
@@ -46,6 +47,8 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
         let cancelled = false;
 
         const syncSessionFromWorkflow = async () => {
+            if (cancelled) return;
+            setIsSyncingResults(true);
             try {
                 const response = await fetch(
                     `/api/status?instanceId=${encodeURIComponent(activeSessionId)}`,
@@ -59,22 +62,27 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                 };
                 if (cancelled) return;
 
-                if (data.status === "complete") {
-                    const workflowResults = data.output?.resultUrls ?? [];
+                const workflowResults = data.output?.resultUrls ?? [];
+                if (workflowResults.length > 0) {
                     const mergedResults = Array.from(new Set([...(session.results || []), ...workflowResults]));
+                    const targetStatus = data.status === "complete" ? "completed" : "processing";
+                    const hasNewResults = mergedResults.length !== session.results.length;
+                    const statusChanged = session.status !== targetStatus;
 
-                    await sessionService.updateSession(activeSessionId, {
-                        status: "completed",
-                        results: mergedResults,
-                    });
-
-                    if (!cancelled) {
-                        setSession((prev) => {
-                            if (!prev) return prev;
-                            return { ...prev, status: "completed", results: mergedResults };
+                    if (hasNewResults || statusChanged) {
+                        await sessionService.updateSession(activeSessionId, {
+                            status: targetStatus,
+                            results: mergedResults,
                         });
+
+                        if (!cancelled) {
+                            setSession((prev) => {
+                                if (!prev) return prev;
+                                return { ...prev, status: targetStatus, results: mergedResults };
+                            });
+                        }
                     }
-                    return;
+                    if (data.status === "complete") return;
                 }
 
                 if (data.status === "errored" || data.status === "terminated") {
@@ -85,6 +93,10 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                 }
             } catch (error) {
                 console.warn("Workflow sync failed:", error);
+            } finally {
+                if (!cancelled) {
+                    setIsSyncingResults(false);
+                }
             }
         };
 
@@ -218,6 +230,19 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
 
     if (!session || !user) return null;
 
+    const noResultsTitle =
+        session.status === "failed"
+            ? "Generowanie zakończone błędem"
+            : session.status === "completed"
+                ? "Workflow zakończony, trwa synchronizacja wyników"
+                : "Sesja w trakcie generowania";
+    const noResultsDescription =
+        session.status === "failed"
+            ? "Nie udało się pobrać wyników z workflow. Uruchom kontynuację sesji ponownie."
+            : isSyncingResults
+                ? "Sprawdzamy workflow i pobieramy gotowe zdjęcia do tej sesji..."
+                : "To może potrwać kilka minut. Odśwież stronę za moment, aby sprawdzić wyniki.";
+
     return (
         <div className="min-h-screen bg-[#020617] text-white selection:bg-blue-500/30 font-sans pb-20">
             <header className="border-b border-white/5 bg-black/20 backdrop-blur-xl sticky top-0 z-50">
@@ -275,9 +300,13 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                         {session.results.length === 0 ? (
                             <Card className="border-white/10 bg-white/5 backdrop-blur-xl border-dashed">
                                 <CardContent className="flex flex-col items-center justify-center py-20 text-center">
-                                    <Loader2 className="h-10 w-10 text-blue-500 animate-spin mb-4" />
-                                    <h3 className="text-lg font-medium text-white">Sesja w trakcie generowania</h3>
-                                    <p className="text-zinc-400 max-w-sm mt-2">To może potrwać kilka minut. Odśwież stronę za moment, aby sprawdzić wyniki.</p>
+                                    {session.status !== "failed" ? (
+                                        <Loader2 className="h-10 w-10 text-blue-500 animate-spin mb-4" />
+                                    ) : (
+                                        <ImageIcon className="h-10 w-10 text-zinc-500 mb-4" />
+                                    )}
+                                    <h3 className="text-lg font-medium text-white">{noResultsTitle}</h3>
+                                    <p className="text-zinc-400 max-w-sm mt-2">{noResultsDescription}</p>
                                 </CardContent>
                             </Card>
                         ) : (

@@ -349,19 +349,27 @@ const workerHandler = {
             try {
                 const instance = await env.GENERATION_WORKFLOW.get(instanceId);
                 const status = await instance.status();
+                const statusOutput = status.output as { resultUrls?: string[] } | undefined;
+                const workflowResultUrls = statusOutput?.resultUrls ?? [];
 
-                let partialUrls: string[] = [];
-                if (status.status !== "complete") {
+                let discoveredUrls: string[] = [];
+                if (status.status !== "complete" || workflowResultUrls.length === 0) {
                     const prefix = runId ? `results/${instanceId}/${runId}/` : `results/${instanceId}/`;
                     const list = await env.MEDIA_BUCKET.list({ prefix });
-                    partialUrls = list.objects
+                    discoveredUrls = list.objects
                         .sort((a, b) => a.key.localeCompare(b.key))
                         .map((o) => `${WORKER_URL}/file?key=${encodeURIComponent(o.key)}`);
                 }
 
+                const finalResultUrls =
+                    workflowResultUrls.length > 0 ? workflowResultUrls : discoveredUrls;
+                const finalOutput = statusOutput
+                    ? { ...statusOutput, resultUrls: finalResultUrls }
+                    : { resultUrls: finalResultUrls };
+
                 return new Response(JSON.stringify({
                     status: status.status,
-                    output: status.output ?? { resultUrls: partialUrls },
+                    output: finalOutput,
                     error: status.error ?? null,
                 }), {
                     headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
