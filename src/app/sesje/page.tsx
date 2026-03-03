@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { sessionService, Photosession } from "@/lib/sessions";
 import { Camera, Calendar, ArrowRight, Loader2, Coins, Plus, Image as ImageIcon } from "lucide-react";
@@ -14,6 +14,19 @@ export default function SessionsPage() {
     const router = useRouter();
     const [sessions, setSessions] = useState<Photosession[]>([]);
     const [loading, setLoading] = useState(true);
+
+    const fetchData = useCallback(async () => {
+        if (!user) return;
+        setLoading(true);
+        try {
+            const fetchedSessions = await sessionService.getUserSessions(user.uid);
+            setSessions(fetchedSessions);
+        } catch (error) {
+            console.error("Error fetching sessions:", error);
+        } finally {
+            setLoading(false);
+        }
+    }, [user]);
 
     useEffect(() => {
         if (!authLoading && !user) {
@@ -33,20 +46,7 @@ export default function SessionsPage() {
         }
 
         return () => clearTimeout(timer);
-    }, [user, authLoading, router]);
-
-    const fetchData = async () => {
-        if (!user) return;
-        setLoading(true);
-        try {
-            const fetchedSessions = await sessionService.getUserSessions(user.uid);
-            setSessions(fetchedSessions);
-        } catch (error) {
-            console.error("Error fetching sessions:", error);
-        } finally {
-            setLoading(false);
-        }
-    };
+    }, [user, authLoading, router, fetchData]);
 
     if (authLoading || loading) {
         return (
@@ -129,6 +129,7 @@ export default function SessionsPage() {
                             <Card key={session.id} className="overflow-hidden border-white/10 bg-white/5 backdrop-blur-xl group hover:border-blue-500/30 transition-all">
                                 <div className="aspect-video relative overflow-hidden bg-black/40 flex items-center justify-center">
                                     {session.results?.[0] ? (
+                                        /* eslint-disable-next-line @next/next/no-img-element */
                                         <img
                                             src={session.results[0]}
                                             alt={session.name}

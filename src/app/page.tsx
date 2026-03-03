@@ -321,6 +321,7 @@ export default function Home() {
               >
                 <div className="absolute -inset-4 rounded-[40px] border border-white/5 bg-white/[0.01] backdrop-blur-sm" />
                 <div className="relative aspect-square overflow-hidden rounded-[32px] border border-white/10 shadow-3xl bg-zinc-900 group">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src="/hero-team-kamienica-closer.png"
                     alt="Corporate AI Preview"
@@ -363,6 +364,7 @@ export default function Home() {
                   onClick={() => setSelectedImage(url)}
                 >
                   <div className="absolute inset-0 bg-blue-600/20 opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none" />
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={url}
                     alt={`Przykładowa sesja ${i}`}

@@ -145,6 +145,7 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                         transition={{ delay: i * 0.1 }}
                                         className="group relative rounded-2xl overflow-hidden border border-white/10 bg-zinc-900 aspect-[3/4]"
                                     >
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
                                         <img
                                             src={url}
                                             alt={`Generated shot ${i + 1}`}
@@ -190,6 +191,7 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                     <div className="grid grid-cols-3 gap-2">
                                         {session.faceReferences.map((url, i) => (
                                             <div key={i} className="aspect-square rounded-lg overflow-hidden border border-white/10 bg-zinc-900">
+                                                {/* eslint-disable-next-line @next/next/no-img-element */}
                                                 <img src={url} className="w-full h-full object-cover" alt="Face ref" />
                                             </div>
                                         ))}
@@ -206,6 +208,7 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                     <div className="grid grid-cols-2 gap-2">
                                         {session.officeReferences.map((url, i) => (
                                             <div key={i} className="aspect-video rounded-lg overflow-hidden border border-white/10 bg-zinc-900">
+                                                {/* eslint-disable-next-line @next/next/no-img-element */}
                                                 <img src={url} className="w-full h-full object-cover" alt="Office ref" />
                                             </div>
                                         ))}

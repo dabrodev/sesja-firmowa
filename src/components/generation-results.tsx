@@ -54,6 +54,7 @@ export function GenerationResults({ sessionId, resultUrls = [] }: GenerationResu
                             className="group relative aspect-[3/4] overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 shadow-2xl cursor-pointer"
                             onClick={() => setSelectedImage(url)}
                         >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                                 src={url}
                                 alt={`Wynik ${i + 1}`}

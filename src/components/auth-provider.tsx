@@ -84,7 +84,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             unsubscribeAuth();
             if (unsubscribeProfile) unsubscribeProfile();
         };
-    }, []);
+    }, [userProfile?.isBetaTester]);
 
     const loginWithGoogle = async () => {
         try {

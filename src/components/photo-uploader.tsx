@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Upload, X, FileImage, CheckCircle2, ImagePlus } from "lucide-react";
+import { Upload, X, CheckCircle2, ImagePlus } from "lucide-react";
 import { useDropzone } from "react-dropzone";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -166,6 +166,7 @@ export function PhotoUploader({
                             exit={{ opacity: 0, scale: 0.8 }}
                             className="group relative aspect-square overflow-hidden rounded-xl border border-white/10 bg-zinc-900"
                         >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                                 src={asset.url}
                                 alt={asset.name}

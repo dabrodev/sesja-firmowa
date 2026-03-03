@@ -25,7 +25,7 @@ export const BetaGuard = ({ children }: { children: React.ReactNode }) => {
             } else {
                 setError("Nieprawidłowy kod dostępu. Spróbuj ponownie.");
             }
-        } catch (err) {
+        } catch {
             setError("Wystąpił błąd. Spróbuj później.");
         } finally {
             setLoading(false);

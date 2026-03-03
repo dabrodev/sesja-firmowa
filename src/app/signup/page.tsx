@@ -82,6 +82,7 @@ function SignUpContent() {
                         className="w-full bg-white text-black hover:bg-zinc-200 h-12 text-base font-semibold transition-all flex items-center justify-center gap-3"
                     >
                         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : (
+                            /* eslint-disable-next-line @next/next/no-img-element */
                             <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="h-5 w-5" />
                         )}
                         Zarejestruj przez Google

@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, CheckCircle2, Search, Trash2, Shield, AlertTriangle } from "lucide-react";
+import { Loader2, CheckCircle2, Search, Trash2, Shield } from "lucide-react";
 import { assetService } from "@/lib/assets";
 import { PhotoAsset } from "@/lib/store";
 import { motion, AnimatePresence } from "framer-motion";
@@ -35,15 +34,7 @@ export function AssetGalleryModal({
         new Set(currentSelected.map(a => a.id))
     );
 
-    useEffect(() => {
-        if (isOpen && userId) {
-            loadAssets();
-            // Reset selection based on currently selected assets in parent component
-            setSelectedIds(new Set(currentSelected.map(a => a.id)));
-        }
-    }, [isOpen, userId, type, currentSelected]);
-
-    const loadAssets = async () => {
+    const loadAssets = useCallback(async () => {
         setIsLoading(true);
         try {
             const data = await assetService.getUserAssets(userId, type);
@@ -54,7 +45,15 @@ export function AssetGalleryModal({
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [userId, type]);
+
+    useEffect(() => {
+        if (isOpen && userId) {
+            void loadAssets();
+            // Reset selection based on currently selected assets in parent component
+            setSelectedIds(new Set(currentSelected.map(a => a.id)));
+        }
+    }, [isOpen, userId, currentSelected, loadAssets]);
 
     const toggleSelection = (assetId: string) => {
         const newSelected = new Set(selectedIds);
@@ -163,6 +162,7 @@ export function AssetGalleryModal({
                                                     disabled && "opacity-40 cursor-not-allowed grayscale-[50%]"
                                                 )}
                                             >
+                                                {/* eslint-disable-next-line @next/next/no-img-element */}
                                                 <img
                                                     src={asset.url}
                                                     alt={asset.name}
