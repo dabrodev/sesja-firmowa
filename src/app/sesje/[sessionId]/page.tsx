@@ -10,6 +10,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
     Select,
     SelectContent,
     SelectItem,
@@ -25,7 +34,7 @@ import { ImageWithPlaceholder } from "@/components/image-with-placeholder";
 
 export default function SessionDetailsPage({ params }: { params: Promise<{ sessionId: string }> }) {
     const { sessionId } = use(params);
-    const { user, loading: authLoading } = useAuth();
+    const { user, loading: authLoading, logout } = useAuth();
     const router = useRouter();
     const [session, setSession] = useState<Photosession | null>(null);
     const [loading, setLoading] = useState(true);
@@ -280,18 +289,55 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
     return (
         <div className="min-h-screen bg-[#020617] text-white selection:bg-blue-500/30 font-sans pb-20">
             <header className="border-b border-white/5 bg-black/20 backdrop-blur-xl sticky top-0 z-50">
-                <div className="container mx-auto flex h-16 items-center px-6">
-                    <Link href={`/sesje`}>
-                        <Button variant="ghost" className="text-zinc-400 hover:text-white hover:bg-white/5 -ml-4 mr-4">
-                            <ArrowLeft className="mr-2 h-4 w-4" /> wszystkie sesje
-                        </Button>
-                    </Link>
-                    <div className="flex items-center gap-2">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10 border border-blue-500/20">
-                            <Camera className="h-4 w-4 text-blue-400" />
+                <div className="container mx-auto flex h-16 items-center justify-between px-6">
+                    <div className="flex items-center">
+                        <Link href={`/sesje`}>
+                            <Button variant="ghost" className="text-zinc-400 hover:text-white hover:bg-white/5 -ml-4 mr-4">
+                                <ArrowLeft className="mr-2 h-4 w-4" /> wszystkie sesje
+                            </Button>
+                        </Link>
+                        <div className="flex items-center gap-2">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10 border border-blue-500/20">
+                                <Camera className="h-4 w-4 text-blue-400" />
+                            </div>
+                            <span className="text-lg font-bold tracking-tight">Szczegóły Sesji</span>
                         </div>
-                        <span className="text-lg font-bold tracking-tight">Szczegóły Sesji</span>
                     </div>
+
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0">
+                                <Avatar className="h-9 w-9">
+                                    <AvatarImage src={user?.photoURL || ""} alt={user?.displayName || ""} />
+                                    <AvatarFallback className="bg-blue-600 text-white">
+                                        {user?.displayName?.charAt(0) || user?.email?.charAt(0)}
+                                    </AvatarFallback>
+                                </Avatar>
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-56 bg-[#0f172a] border-white/10 text-white" align="end" forceMount>
+                            <DropdownMenuLabel className="font-normal">
+                                <div className="flex flex-col space-y-1">
+                                    <p className="text-sm font-medium leading-none">{user?.displayName}</p>
+                                    <p className="text-xs leading-none text-white/50">{user?.email}</p>
+                                </div>
+                            </DropdownMenuLabel>
+                            <DropdownMenuSeparator className="bg-white/10" />
+                            <DropdownMenuItem className="focus:bg-white/5 focus:text-white cursor-pointer" asChild>
+                                <Link href="/sesje">moje sesje</Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="focus:bg-white/5 focus:text-white cursor-pointer" asChild>
+                                <Link href="/materialy">moje materiały</Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator className="bg-white/10" />
+                            <DropdownMenuItem
+                                className="focus:bg-red-500/10 focus:text-red-400 cursor-pointer text-red-400"
+                                onClick={() => logout()}
+                            >
+                                wyloguj się
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             </header>
 

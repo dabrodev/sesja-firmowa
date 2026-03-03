@@ -8,9 +8,18 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export default function SessionsPage() {
-    const { user, userProfile, loading: authLoading } = useAuth();
+    const { user, userProfile, loading: authLoading, logout } = useAuth();
     const router = useRouter();
     const [sessions, setSessions] = useState<Photosession[]>([]);
     const [loading, setLoading] = useState(true);
@@ -87,6 +96,40 @@ export default function SessionsPage() {
                                 <span className="text-[10px] uppercase text-blue-400/60">PKT</span>
                             </div>
                         )}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0">
+                                    <Avatar className="h-9 w-9">
+                                        <AvatarImage src={user.photoURL || ""} alt={user.displayName || ""} />
+                                        <AvatarFallback className="bg-blue-600 text-white">
+                                            {user.displayName?.charAt(0) || user.email?.charAt(0)}
+                                        </AvatarFallback>
+                                    </Avatar>
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="w-56 bg-[#0f172a] border-white/10 text-white" align="end" forceMount>
+                                <DropdownMenuLabel className="font-normal">
+                                    <div className="flex flex-col space-y-1">
+                                        <p className="text-sm font-medium leading-none">{user.displayName}</p>
+                                        <p className="text-xs leading-none text-white/50">{user.email}</p>
+                                    </div>
+                                </DropdownMenuLabel>
+                                <DropdownMenuSeparator className="bg-white/10" />
+                                <DropdownMenuItem className="focus:bg-white/5 focus:text-white cursor-pointer" asChild>
+                                    <Link href="/materialy">moje materiały</Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="focus:bg-white/5 focus:text-white cursor-pointer" asChild>
+                                    <Link href="/generator">nowa sesja</Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator className="bg-white/10" />
+                                <DropdownMenuItem
+                                    className="focus:bg-red-500/10 focus:text-red-400 cursor-pointer text-red-400"
+                                    onClick={() => logout()}
+                                >
+                                    wyloguj się
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                         <Link href="/wolny-generator">
                             <Button variant="outline" className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white hidden sm:flex">
                                 <Sparkles className="mr-2 h-4 w-4" /> Generator pojedynczego zdjęcia
