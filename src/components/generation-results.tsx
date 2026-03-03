@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Download, Share2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAppStore } from "@/lib/store";
+import { useRouter } from "next/navigation";
 
 interface GenerationResultsProps {
     sessionId?: string | null;
@@ -14,6 +15,7 @@ interface GenerationResultsProps {
 
 export function GenerationResults({ sessionId, resultUrls = [], expectedCount = 4 }: GenerationResultsProps) {
     const { resetSession } = useAppStore();
+    const router = useRouter();
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
     return (
@@ -27,7 +29,7 @@ export function GenerationResults({ sessionId, resultUrls = [], expectedCount = 
                     <p className="text-zinc-400">Oto twoje profesjonalne zdjęcia biznesowe.</p>
                     {sessionId && (
                         <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-400 border border-emerald-500/20">
-                            zapisano w twoich projektach
+                            zapisano w twoich sesjach
                         </span>
                     )}
                 </div>
@@ -85,10 +87,14 @@ export function GenerationResults({ sessionId, resultUrls = [], expectedCount = 
                     className="bg-white text-black hover:bg-zinc-200"
                     onClick={() => {
                         resetSession();
+                        if (sessionId) {
+                            router.push(`/sesje/${sessionId}`);
+                            return;
+                        }
                         window.location.reload();
                     }}
                 >
-                    rozpocznij nową sesję
+                    {sessionId ? "przejdź do sesji" : "rozpocznij nową sesję"}
                 </Button>
             </div>
 
