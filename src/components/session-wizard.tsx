@@ -27,6 +27,45 @@ import Link from "next/link";
 type WizardStepId = "face" | "office" | "generate";
 const COST_PER_PHOTO = 30;
 
+function getReadableError(error: unknown, fallback: string): string {
+    if (!error) return fallback;
+    if (error instanceof Error) return error.message || fallback;
+
+    if (typeof error === "string") {
+        const trimmed = error.trim();
+        if (!trimmed) return fallback;
+        try {
+            const parsed = JSON.parse(trimmed) as { message?: unknown; error?: unknown };
+            if (typeof parsed.message === "string" && parsed.message.trim()) {
+                return parsed.message;
+            }
+            if (typeof parsed.error === "string" && parsed.error.trim()) {
+                return parsed.error;
+            }
+        } catch {
+            // fallback to raw string
+        }
+        return trimmed;
+    }
+
+    if (typeof error === "object") {
+        const candidate = error as { message?: unknown; error?: unknown };
+        if (typeof candidate.message === "string" && candidate.message.trim()) {
+            return candidate.message;
+        }
+        if (typeof candidate.error === "string" && candidate.error.trim()) {
+            return candidate.error;
+        }
+        try {
+            return JSON.stringify(error);
+        } catch {
+            return fallback;
+        }
+    }
+
+    return fallback;
+}
+
 export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequested }: { sessionId?: string, onNewSessionRequested?: () => void }) {
     const [step, setStep] = useState<WizardStepId>("face");
     const [isGenerating, setIsGenerating] = useState(false);
@@ -436,7 +475,7 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                                     const data = await sr.json() as {
                                                                         status: string;
                                                                         output?: { resultUrls?: string[]; promptDebug?: PromptRunTrace };
-                                                                        error?: string;
+                                                                        error?: unknown;
                                                                     };
 
                                                                     if (attempts < 5) {
@@ -479,7 +518,7 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                                         resolve();
                                                                     } else if (data.status === "errored" || data.status === "terminated") {
                                                                         clearInterval(poll);
-                                                                        const errStr = typeof data.error === 'object' ? JSON.stringify(data.error) : data.error;
+                                                                        const errStr = getReadableError(data.error, "Workflow zakończony błędem");
                                                                         setIsGenerating(false);
                                                                         reject(new Error(errStr || "Workflow zakończony błędem"));
                                                                     } else if (attempts >= maxAttempts) {
@@ -500,7 +539,7 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                                 activeWorkflowRunId: null,
                                                             });
                                                         }
-                                                        alert("Błąd generowania: " + (error instanceof Error ? error.message : "Nieznany błąd"));
+                                                        alert("Błąd generowania: " + getReadableError(error, "Nieznany błąd"));
                                                         setIsGenerating(false);
                                                     }
                                                 }}

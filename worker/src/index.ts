@@ -55,7 +55,51 @@ type PromptDebugPayload = {
 };
 
 function getErrorMessage(error: unknown, fallback: string): string {
-    return error instanceof Error ? error.message : fallback;
+    const normalized = getReadableError(error);
+    return normalized || fallback;
+}
+
+function getReadableError(error: unknown): string | null {
+    if (!error) return null;
+    if (error instanceof Error) return error.message || null;
+
+    if (typeof error === "string") {
+        const trimmed = error.trim();
+        if (!trimmed) return null;
+        try {
+            const parsed = JSON.parse(trimmed) as { message?: unknown; error?: unknown };
+            if (typeof parsed.message === "string" && parsed.message.trim()) {
+                return parsed.message;
+            }
+            if (typeof parsed.error === "string" && parsed.error.trim()) {
+                return parsed.error;
+            }
+        } catch {
+            // keep raw string
+        }
+        return trimmed;
+    }
+
+    if (typeof error === "object") {
+        const candidate = error as { message?: unknown; error?: unknown };
+        if (typeof candidate.message === "string" && candidate.message.trim()) {
+            return candidate.message;
+        }
+        if (typeof candidate.error === "string" && candidate.error.trim()) {
+            return candidate.error;
+        }
+        try {
+            return JSON.stringify(error);
+        } catch {
+            return null;
+        }
+    }
+
+    return null;
+}
+
+function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 const CORS_HEADERS = {
@@ -184,41 +228,53 @@ export class GenerationWorkflow extends WorkflowEntrypoint<Env, GenerateParams> 
 
         for (let i = 0; i < imagePrompts.length; i++) {
             const { variation, finalPrompt } = imagePrompts[i];
-            const key = await step.do(`generate-variation-${i + 1}`, {
-                retries: { limit: 2, delay: "10 seconds", backoff: "linear" },
-            }, async () => {
-                // Fetch reference images fresh from R2 in each step
-                const [faceImages, officeImages, outfitImages] = await Promise.all([
-                    fetchImagesFromR2(this.env, faceKeys.slice(0, 4)),
-                    fetchImagesFromR2(this.env, officeKeys.slice(0, 2)),
-                    outfitKeys.length
-                        ? fetchImagesFromR2(this.env, outfitKeys.slice(0, 6))
-                        : Promise.resolve<{ base64: string; mimeType: string }[]>([]),
-                ]);
+            try {
+                const key = await step.do(`generate-variation-${i + 1}`, {
+                    retries: { limit: 2, delay: "10 seconds", backoff: "linear" },
+                }, async () => {
+                    // Fetch reference images fresh from R2 in each step
+                    const [faceImages, officeImages, outfitImages] = await Promise.all([
+                        fetchImagesFromR2(this.env, faceKeys.slice(0, 4)),
+                        fetchImagesFromR2(this.env, officeKeys.slice(0, 2)),
+                        outfitKeys.length
+                            ? fetchImagesFromR2(this.env, outfitKeys.slice(0, 6))
+                            : Promise.resolve<{ base64: string; mimeType: string }[]>([]),
+                    ]);
 
-                // Generate one image with Gemini
-                const base64Image = await generateOneImage(
-                    this.env,
-                    finalPrompt,
-                    variation,
-                    faceImages,
-                    officeImages,
-                    outfitImages
+                    // Generate one image with Gemini
+                    const base64Image = await generateOneImage(
+                        this.env,
+                        finalPrompt,
+                        variation,
+                        faceImages,
+                        officeImages,
+                        outfitImages
+                    );
+
+                    // Save immediately to R2 — return only the key (small string)
+                    const resultKey = `results/${sessionId}/${safeRunId}/photo-${i + 1}.jpg`;
+                    if (base64Image) {
+                        const imageData = base64ToArrayBuffer(base64Image);
+                        await this.env.MEDIA_BUCKET.put(resultKey, imageData, {
+                            httpMetadata: { contentType: "image/jpeg" },
+                        });
+                        return resultKey;
+                    }
+                    return null;
+                });
+
+                if (key) resultKeys.push(key);
+            } catch (error) {
+                console.error(
+                    `[Workflow] Variation ${i + 1} failed (${variation}): ${getReadableError(error) || "unknown error"}`
                 );
+            }
+        }
 
-                // Save immediately to R2 — return only the key (small string)
-                const resultKey = `results/${sessionId}/${safeRunId}/photo-${i + 1}.jpg`;
-                if (base64Image) {
-                    const imageData = base64ToArrayBuffer(base64Image);
-                    await this.env.MEDIA_BUCKET.put(resultKey, imageData, {
-                        httpMetadata: { contentType: "image/jpeg" },
-                    });
-                    return resultKey;
-                }
-                return null;
-            });
-
-            if (key) resultKeys.push(key);
+        if (resultKeys.length === 0) {
+            throw new Error(
+                "Nie udało się wygenerować żadnego zdjęcia w tej próbie. Spróbuj zmienić prompt lub materiały i uruchomić sesję ponownie."
+            );
         }
 
         // Build result URLs (served via Worker's /file endpoint)
@@ -464,7 +520,7 @@ const workerHandler = {
                 return new Response(JSON.stringify({
                     status: status.status,
                     output: finalOutput,
-                    error: status.error ?? null,
+                    error: getReadableError(status.error),
                 }), {
                     headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
                 });
@@ -684,21 +740,27 @@ async function generateOneImage(
         text: finalImagePrompt,
     });
 
-    console.log(`[Gemini] Calling API for variation: ${variation}`);
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        console.log(`[Gemini] Calling API for variation ${variation}, attempt ${attempt}/3`);
 
-    // Throws on error — allows Workflow to retry the step
-    const response = await ai.models.generateContent({
-        model: "gemini-3.1-flash-image-preview",
-        contents: [{ role: "user", parts }],
-        config: { responseModalities: ["TEXT", "IMAGE"] },
-    });
+        // Throws on error — allows Workflow to retry the step
+        const response = await ai.models.generateContent({
+            model: "gemini-3.1-flash-image-preview",
+            contents: [{ role: "user", parts }],
+            config: { responseModalities: ["TEXT", "IMAGE"] },
+        });
 
-    console.log(`[Gemini] Response candidates: ${response.candidates?.length ?? 0}`);
+        console.log(`[Gemini] Response candidates: ${response.candidates?.length ?? 0}`);
 
-    for (const part of response.candidates?.[0]?.content?.parts ?? []) {
-        if (part.inlineData?.data) {
-            console.log(`[Gemini] Got image data for variation: ${variation}`);
-            return part.inlineData.data;
+        for (const part of response.candidates?.[0]?.content?.parts ?? []) {
+            if (part.inlineData?.data) {
+                console.log(`[Gemini] Got image data for variation: ${variation}`);
+                return part.inlineData.data;
+            }
+        }
+
+        if (attempt < 3) {
+            await sleep(attempt * 800);
         }
     }
 
