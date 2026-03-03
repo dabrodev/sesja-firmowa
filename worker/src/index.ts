@@ -232,14 +232,21 @@ export class GenerationWorkflow extends WorkflowEntrypoint<Env, GenerateParams> 
                 const key = await step.do(`generate-variation-${i + 1}`, {
                     retries: { limit: 2, delay: "10 seconds", backoff: "linear" },
                 }, async () => {
-                    // Fetch reference images fresh from R2 in each step
-                    const [faceImages, officeImages, outfitImages] = await Promise.all([
-                        fetchImagesFromR2(this.env, faceKeys.slice(0, 4)),
-                        fetchImagesFromR2(this.env, officeKeys.slice(0, 2)),
-                        outfitKeys.length
-                            ? fetchImagesFromR2(this.env, outfitKeys.slice(0, 6))
-                            : Promise.resolve<{ base64: string; mimeType: string }[]>([]),
-                    ]);
+                // Fetch reference images fresh from R2 in each step
+                const [faceImages, officeImages, outfitImages] = await Promise.all([
+                    fetchImagesFromR2(this.env, faceKeys.slice(0, 4), { allowMissing: true, context: "face" }),
+                    fetchImagesFromR2(this.env, officeKeys.slice(0, 2), { allowMissing: true, context: "office" }),
+                    outfitKeys.length
+                        ? fetchImagesFromR2(this.env, outfitKeys.slice(0, 6), { allowMissing: true, context: "outfit" })
+                        : Promise.resolve<{ base64: string; mimeType: string }[]>([]),
+                ]);
+
+                if (faceImages.length === 0) {
+                    throw new Error("Brak dostępnych zdjęć wizerunkowych w chmurze. Wgraj je ponownie i uruchom sesję jeszcze raz.");
+                }
+                if (officeImages.length === 0) {
+                    throw new Error("Brak dostępnych zdjęć biura w chmurze. Wgraj lokację ponownie i uruchom sesję jeszcze raz.");
+                }
 
                     // Generate one image with Gemini
                     const base64Image = await generateOneImage(
@@ -428,7 +435,7 @@ const workerHandler = {
                 // Fetch reference images if provided
                 let refImages: { base64: string; mimeType: string }[] = [];
                 if (referenceKeys && referenceKeys.length > 0) {
-                    refImages = await fetchImagesFromR2(env, referenceKeys);
+                    refImages = await fetchImagesFromR2(env, referenceKeys, { allowMissing: true, context: "custom-generator" });
                 }
 
                 // Append the requested 5:4 aspect ratio directive to the prompt
@@ -600,17 +607,36 @@ async function handleDeleteFile(request: Request, env: Env): Promise<Response> {
 
 // ─── Fetch images from R2 ─────────────────────────────────────────────────────
 
-async function fetchImagesFromR2(env: Env, keys: string[]): Promise<{ base64: string; mimeType: string }[]> {
-    const results = await Promise.all(
-        keys.map(async (key) => {
-            const object = await env.MEDIA_BUCKET.get(key);
-            if (!object) throw new Error(`R2 object not found: ${key}`);
-            const buffer = await object.arrayBuffer();
-            const base64 = arrayBufferToBase64(buffer);
-            const mimeType = object.httpMetadata?.contentType || "image/jpeg";
-            return { base64, mimeType: mimeType.split(";")[0] };
-        })
-    );
+async function fetchImagesFromR2(
+    env: Env,
+    keys: string[],
+    options?: { allowMissing?: boolean; context?: string }
+): Promise<{ base64: string; mimeType: string }[]> {
+    const allowMissing = options?.allowMissing === true;
+    const context = options?.context || "reference";
+    const missingKeys: string[] = [];
+    const results: { base64: string; mimeType: string }[] = [];
+
+    for (const key of keys) {
+        const object = await env.MEDIA_BUCKET.get(key);
+        if (!object) {
+            if (!allowMissing) {
+                throw new Error(`R2 object not found: ${key}`);
+            }
+            missingKeys.push(key);
+            continue;
+        }
+
+        const buffer = await object.arrayBuffer();
+        const base64 = arrayBufferToBase64(buffer);
+        const mimeType = object.httpMetadata?.contentType || "image/jpeg";
+        results.push({ base64, mimeType: mimeType.split(";")[0] });
+    }
+
+    if (missingKeys.length > 0) {
+        console.warn(`[R2] Missing ${context} key(s): ${missingKeys.join(", ")}`);
+    }
+
     return results;
 }
 
