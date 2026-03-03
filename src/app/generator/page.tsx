@@ -38,32 +38,25 @@ import { Suspense } from "react";
 
 function WizardWrapper() {
     const searchParams = useSearchParams();
-    const sessionIdParam = searchParams.get("sessionId") || undefined;
-    const { user } = useAuth();
-    const [sessionId, setSessionId] = React.useState<string | undefined>(sessionIdParam);
-    const [isDeterminingSession, setIsDeterminingSession] = React.useState(!sessionIdParam);
+    const sessionId = searchParams.get("sessionId") || undefined;
+    const router = useRouter();
 
-    React.useEffect(() => {
-        if (user && !sessionIdParam) {
-            import("@/lib/sessions").then(({ sessionService }) => {
-                sessionService.getUserSessions(user.uid).then(sessions => {
-                    if (sessions.length > 0) {
-                        setSessionId(sessions[0].id);
-                    }
-                    setIsDeterminingSession(false);
-                }).catch(err => {
-                    console.error("Failed to determine last session", err);
-                    setIsDeterminingSession(false);
-                });
-            });
-        }
-    }, [user, sessionIdParam]);
-
-    if (isDeterminingSession) {
-        return <div className="h-64 flex items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" /></div>;
-    }
-
-    return <SessionWizard sessionId={sessionId} onNewSessionRequested={() => setSessionId(undefined)} />;
+    return (
+        <div className="space-y-6">
+            <div className="mx-auto max-w-3xl rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">
+                {sessionId ? (
+                    <p>
+                        Tryb: <span className="font-semibold text-white">Kontynuacja sesji</span>. Kolejne 4 zdjęcia zostaną dopisane do wybranej sesji.
+                    </p>
+                ) : (
+                    <p>
+                        Tryb: <span className="font-semibold text-white">Nowa sesja</span>. Zostanie utworzona nowa sesja po kliknięciu generowania.
+                    </p>
+                )}
+            </div>
+            <SessionWizard sessionId={sessionId} onNewSessionRequested={() => router.replace("/generator")} />
+        </div>
+    );
 }
 
 export default function App() {
@@ -151,12 +144,12 @@ export default function App() {
                             </Button>
                         )}
                         <Link href="/sesje">
-                            <Button variant="outline" className="border-white/10 bg-white/5 text-white hover:bg-white/10 hidden sm:flex">
+                            <Button variant="outline" className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white hidden sm:flex">
                                 moje sesje
                             </Button>
                         </Link>
                         <Link href="/">
-                            <Button variant="outline" className="border-white/10 bg-white/5 text-white hover:bg-white/10 hidden sm:flex">
+                            <Button variant="outline" className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white hidden sm:flex">
                                 <Home className="mr-2 h-4 w-4" /> powrót
                             </Button>
                         </Link>

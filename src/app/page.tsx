@@ -123,7 +123,7 @@ export default function Home() {
                     <Link href="/sesje">moje sesje</Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem className="focus:bg-white/5 focus:text-white cursor-pointer" asChild>
-                    <Link href="/wolny-generator">wolny generator</Link>
+                    <Link href="/wolny-generator">generator pojedynczego zdjęcia</Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem className="focus:bg-white/5 focus:text-white cursor-pointer">
                     ustawienia
@@ -155,7 +155,7 @@ export default function Home() {
             )}
             <Link href="/generator">
               <Button className="bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-500/25 px-3 sm:px-6 h-8 sm:h-10 text-xs sm:text-sm">
-                <span className="hidden sm:inline">uruchom </span>kreator
+                <span className="hidden sm:inline">nowa </span>sesja
               </Button>
             </Link>
           </div>

@@ -62,10 +62,10 @@ export default function CustomGeneratorPage() {
                         <Sparkles className="h-8 w-8" />
                     </div>
                     <h1 className="text-4xl font-bold tracking-tight text-white drop-shadow-sm">
-                        Wolny Generator
+                        Generator pojedynczego zdjęcia
                     </h1>
                     <p className="text-lg text-zinc-400 max-w-2xl mx-auto">
-                        Opisz dowolną scenę i wygeneruj profesjonalne zdjęcie za pomocą modelu <span className="text-blue-400 font-medium">Gemini 3.1 Flash</span>. Zignoruj ograniczenia i stwórz co tylko chcesz.
+                        Opisz scenę i wygeneruj pojedyncze zdjęcie za pomocą modelu <span className="text-blue-400 font-medium">Gemini 3.1 Flash</span>.
                     </p>
                 </div>
 

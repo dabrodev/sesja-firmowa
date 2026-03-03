@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { sessionService, Photosession } from "@/lib/sessions";
-import { Camera, Calendar, ArrowRight, Loader2, Coins, Plus, Image as ImageIcon } from "lucide-react";
+import { Camera, Calendar, ArrowRight, Loader2, Coins, Plus, Sparkles, Image as ImageIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -87,9 +87,14 @@ export default function SessionsPage() {
                                 <span className="text-[10px] uppercase text-blue-400/60">PKT</span>
                             </div>
                         )}
+                        <Link href="/wolny-generator">
+                            <Button variant="outline" className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white hidden sm:flex">
+                                <Sparkles className="mr-2 h-4 w-4" /> Generator pojedynczego zdjęcia
+                            </Button>
+                        </Link>
                         <Link href="/generator">
-                            <Button variant="outline" className="border-white/10 bg-white/5 text-white hover:bg-white/10">
-                                Uruchom Kreator
+                            <Button variant="outline" className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white">
+                                Nowa sesja
                             </Button>
                         </Link>
                     </div>
@@ -103,11 +108,18 @@ export default function SessionsPage() {
                         <p className="mt-2 text-zinc-400">Przeglądaj wygenerowane materiały i domawiaj kolejne z ujęć.</p>
                     </div>
 
-                    <Link href="/generator">
-                        <Button className="bg-blue-600 hover:bg-blue-700">
-                            <Plus className="mr-2 h-4 w-4" /> Nowa Sesja
-                        </Button>
-                    </Link>
+                    <div className="flex flex-wrap items-center gap-3">
+                        <Link href="/wolny-generator">
+                            <Button variant="outline" className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white">
+                                <Sparkles className="mr-2 h-4 w-4" /> Pojedyncze zdjęcie
+                            </Button>
+                        </Link>
+                        <Link href="/generator">
+                            <Button className="bg-blue-600 hover:bg-blue-700">
+                                <Plus className="mr-2 h-4 w-4" /> Nowa Sesja
+                            </Button>
+                        </Link>
+                    </div>
                 </div>
 
                 {sessions.length === 0 ? (
@@ -116,7 +128,7 @@ export default function SessionsPage() {
                             <Camera className="h-8 w-8 text-zinc-500" />
                         </div>
                         <h2 className="text-xl font-semibold">Nie wygenerowałeś jeszcze żadnej sesji</h2>
-                        <p className="mt-2 mb-8 max-w-sm text-zinc-400">Przejdź do kreatora, ustaw parametry wizerunku oraz biura i odbierz pakiet gotowych zdjęć.</p>
+                        <p className="mt-2 mb-8 max-w-sm text-zinc-400">Rozpocznij nową sesję, ustaw parametry wizerunku oraz biura i odbierz pakiet gotowych zdjęć.</p>
                         <Link href="/generator">
                             <Button className="bg-blue-600 hover:bg-blue-700">
                                 <Plus className="mr-2 h-4 w-4" /> Rozpocznij pierwszą Sesję
@@ -155,7 +167,7 @@ export default function SessionsPage() {
                                 <CardContent className="p-4 bg-zinc-900/50 border-t border-white/5">
                                     <Link href={`/sesje/${session.id}`} className="block">
                                         <Button className="w-full bg-white/5 hover:bg-blue-600 hover:border-blue-500 text-white border border-white/10 flex items-center justify-center gap-2 transition-all">
-                                            Zobacz Sesję <ArrowRight className="h-4 w-4" />
+                                            Otwórz sesję <ArrowRight className="h-4 w-4" />
                                         </Button>
                                     </Link>
                                 </CardContent>

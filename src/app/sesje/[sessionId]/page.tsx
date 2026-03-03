@@ -1,15 +1,18 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, use, useCallback } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { sessionService, Photosession } from "@/lib/sessions";
-import { Camera, Calendar, ArrowLeft, Loader2, Download, ExternalLink, ImageIcon } from "lucide-react";
+import { Camera, Calendar, ArrowLeft, Loader2, Download, ExternalLink, ImageIcon, PencilLine, Save, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { PhotoUploader } from "@/components/photo-uploader";
+import type { PhotoAsset } from "@/lib/store";
+import { referenceUrlToPhotoAsset } from "@/lib/reference-assets";
 
 export default function SessionDetailsPage({ params }: { params: Promise<{ sessionId: string }> }) {
     const { sessionId } = use(params);
@@ -17,6 +20,19 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
     const router = useRouter();
     const [session, setSession] = useState<Photosession | null>(null);
     const [loading, setLoading] = useState(true);
+    const [isEditingReferences, setIsEditingReferences] = useState(false);
+    const [isSavingReferences, setIsSavingReferences] = useState(false);
+    const [faceReferencesDraft, setFaceReferencesDraft] = useState<PhotoAsset[]>([]);
+    const [officeReferencesDraft, setOfficeReferencesDraft] = useState<PhotoAsset[]>([]);
+
+    const resetReferenceDraft = useCallback((sessionData: Photosession) => {
+        setFaceReferencesDraft(
+            sessionData.faceReferences.map((reference, index) => referenceUrlToPhotoAsset(reference, index, "face"))
+        );
+        setOfficeReferencesDraft(
+            sessionData.officeReferences.slice(0, 1).map((reference, index) => referenceUrlToPhotoAsset(reference, index, "office"))
+        );
+    }, []);
 
     useEffect(() => {
         if (!authLoading && !user) {
@@ -33,6 +49,7 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                         return;
                     }
                     setSession(data);
+                    resetReferenceDraft(data);
                 } catch (error) {
                     console.error("Error fetching session:", error);
                     router.push(`/sesje`);
@@ -42,7 +59,48 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
             };
             fetchSession();
         }
-    }, [user, authLoading, router, sessionId]);
+    }, [user, authLoading, router, sessionId, resetReferenceDraft]);
+
+    const handleSaveReferences = async () => {
+        if (!session?.id) return;
+
+        if (faceReferencesDraft.length === 0) {
+            alert("Dodaj przynajmniej jedno zdjęcie wizerunkowe.");
+            return;
+        }
+
+        if (officeReferencesDraft.length === 0) {
+            alert("Wybierz jedną lokację biurową.");
+            return;
+        }
+
+        const updatedFaceReferences = faceReferencesDraft.map((asset) => asset.url);
+        const updatedOfficeReferences = officeReferencesDraft.slice(0, 1).map((asset) => asset.url);
+
+        setIsSavingReferences(true);
+        try {
+            await sessionService.updateSession(session.id, {
+                faceReferences: updatedFaceReferences,
+                officeReferences: updatedOfficeReferences,
+            });
+
+            setSession((prev) => {
+                if (!prev) return prev;
+                return {
+                    ...prev,
+                    faceReferences: updatedFaceReferences,
+                    officeReferences: updatedOfficeReferences,
+                };
+            });
+
+            setIsEditingReferences(false);
+        } catch (error) {
+            console.error("Error updating references:", error);
+            alert("Nie udało się zapisać zmian materiałów. Spróbuj ponownie.");
+        } finally {
+            setIsSavingReferences(false);
+        }
+    };
 
     const handleDownload = async (url: string, index: number) => {
         try {
@@ -71,7 +129,7 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
         );
     }
 
-    if (!session) return null;
+    if (!session || !user) return null;
 
     return (
         <div className="min-h-screen bg-[#020617] text-white selection:bg-blue-500/30 font-sans pb-20">
@@ -113,7 +171,7 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                     <div className="flex-shrink-0">
                         <Link href={`/generator?sessionId=${session.id}`}>
                             <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-lg shadow-blue-500/20">
-                                Dogeneruj +4 zdjęcia
+                                Kontynuuj sesję (+4 zdjęcia)
                             </Button>
                         </Link>
                     </div>
@@ -179,42 +237,125 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
 
                     {/* Sidebar Reference Column */}
                     <div className="space-y-6">
-                        <h2 className="text-xl font-semibold">Użyte materiały</h2>
+                        <div className="flex items-center justify-between gap-3">
+                            <h2 className="text-xl font-semibold">Użyte materiały</h2>
+                            {!isEditingReferences ? (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                                    onClick={() => {
+                                        resetReferenceDraft(session);
+                                        setIsEditingReferences(true);
+                                    }}
+                                >
+                                    <PencilLine className="mr-2 h-4 w-4" /> Wymień materiały
+                                </Button>
+                            ) : null}
+                        </div>
                         <Card className="border-white/10 bg-white/5 backdrop-blur-xl">
                             <CardContent className="p-6 space-y-8">
+                                {isEditingReferences ? (
+                                    <>
+                                        <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 p-3 text-xs text-blue-200">
+                                            Możesz podmienić materiały i kontynuować tę samą sesję. Lokacja biurowa jest ograniczona do 1 zdjęcia, żeby uniknąć miksowania pomieszczeń.
+                                        </div>
 
-                                <div>
-                                    <div className="flex justify-between items-center mb-3">
-                                        <span className="text-sm font-medium text-zinc-300">Zdjęcia Wizerunkowe</span>
-                                        <span className="text-xs bg-white/10 text-zinc-400 px-2 py-0.5 rounded-full">{session.faceReferences.length}</span>
-                                    </div>
-                                    <div className="grid grid-cols-3 gap-2">
-                                        {session.faceReferences.map((url, i) => (
-                                            <div key={i} className="aspect-square rounded-lg overflow-hidden border border-white/10 bg-zinc-900">
-                                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                                <img src={url} className="w-full h-full object-cover" alt="Face ref" />
+                                        <PhotoUploader
+                                            title="Zdjęcia Wizerunkowe"
+                                            description="Wymień zdjęcia twarzy/postaći, które mają być użyte przy kolejnych dogenerowaniach."
+                                            assets={faceReferencesDraft}
+                                            onUpload={(asset) => setFaceReferencesDraft((prev) => [...prev, asset])}
+                                            onRemove={(id) => setFaceReferencesDraft((prev) => prev.filter((asset) => asset.id !== id))}
+                                            maxFiles={10}
+                                            userId={user.uid}
+                                            assetType="face"
+                                        />
+
+                                        <div className="h-px bg-white/10 w-full" />
+
+                                        <PhotoUploader
+                                            title="Lokacja Biurowa"
+                                            description="Wybierz jedną lokację biurową dla kolejnych ujęć tej sesji."
+                                            assets={officeReferencesDraft}
+                                            onUpload={(asset) => setOfficeReferencesDraft([asset])}
+                                            onRemove={(id) => setOfficeReferencesDraft((prev) => prev.filter((asset) => asset.id !== id))}
+                                            maxFiles={1}
+                                            userId={user.uid}
+                                            assetType="office"
+                                        />
+
+                                        <div className="flex flex-wrap justify-end gap-2">
+                                            <Button
+                                                variant="ghost"
+                                                className="text-zinc-300 hover:bg-white/5 hover:text-white"
+                                                onClick={() => {
+                                                    resetReferenceDraft(session);
+                                                    setIsEditingReferences(false);
+                                                }}
+                                            >
+                                                <X className="mr-2 h-4 w-4" /> Anuluj
+                                            </Button>
+                                            <Button
+                                                className="bg-blue-600 hover:bg-blue-700 text-white"
+                                                onClick={handleSaveReferences}
+                                                disabled={isSavingReferences}
+                                            >
+                                                {isSavingReferences ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                                                Zapisz materiały
+                                            </Button>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div>
+                                            <div className="flex justify-between items-center mb-3">
+                                                <span className="text-sm font-medium text-zinc-300">Zdjęcia Wizerunkowe</span>
+                                                <span className="text-xs bg-white/10 text-zinc-400 px-2 py-0.5 rounded-full">{session.faceReferences.length}</span>
                                             </div>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <div className="h-px bg-white/10 w-full" />
-
-                                <div>
-                                    <div className="flex justify-between items-center mb-3">
-                                        <span className="text-sm font-medium text-zinc-300">Lokacje Biurowe</span>
-                                        <span className="text-xs bg-white/10 text-zinc-400 px-2 py-0.5 rounded-full">{session.officeReferences.length}</span>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        {session.officeReferences.map((url, i) => (
-                                            <div key={i} className="aspect-video rounded-lg overflow-hidden border border-white/10 bg-zinc-900">
-                                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                                <img src={url} className="w-full h-full object-cover" alt="Office ref" />
+                                            <div className="grid grid-cols-3 gap-2">
+                                                {session.faceReferences.map((url, i) => (
+                                                    <div key={i} className="aspect-square rounded-lg overflow-hidden border border-white/10 bg-zinc-900">
+                                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                        <img src={url} className="w-full h-full object-cover" alt="Face ref" />
+                                                    </div>
+                                                ))}
                                             </div>
-                                        ))}
-                                    </div>
-                                </div>
+                                        </div>
 
+                                        <div className="h-px bg-white/10 w-full" />
+
+                                        <div>
+                                            <div className="flex justify-between items-center mb-3">
+                                                <span className="text-sm font-medium text-zinc-300">Lokacje Biurowe</span>
+                                                <span className="text-xs bg-white/10 text-zinc-400 px-2 py-0.5 rounded-full">{session.officeReferences.length}</span>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {session.officeReferences.map((url, i) => (
+                                                    <div key={i} className="aspect-video rounded-lg overflow-hidden border border-white/10 bg-zinc-900">
+                                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                        <img src={url} className="w-full h-full object-cover" alt="Office ref" />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {session.officeReferences.length > 1 ? (
+                                            <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-100">
+                                                W tej sesji zapisano wiele lokacji biurowych. Przy kolejnych generacjach zalecamy zostawić tylko jedną, żeby uniknąć mieszania tła.
+                                            </div>
+                                        ) : null}
+
+                                        <Link href={`/generator?sessionId=${session.id}`}>
+                                            <Button
+                                                variant="outline"
+                                                className="w-full border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                                            >
+                                                Kontynuuj tę sesję z aktualnymi materiałami
+                                            </Button>
+                                        </Link>
+                                    </>
+                                )}
                             </CardContent>
                         </Card>
                     </div>

@@ -13,6 +13,7 @@ import { sessionService, Photosession } from "@/lib/sessions";
 import { userService } from "@/lib/users";
 import { cn } from "@/lib/utils";
 import { CopyPlus } from "lucide-react";
+import { referenceUrlToPhotoAsset } from "@/lib/reference-assets";
 
 type WizardStepId = "face" | "office" | "generate";
 
@@ -25,16 +26,36 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
     const [generationStatus, setGenerationStatus] = useState<string>("Inicjalizuję...");
     const [sessionData, setSessionData] = useState<Photosession | null>(null);
     const { user, userProfile } = useAuth();
-    const { currentPersona, currentOffice, addFaceReference, removeFaceReference, addOfficeReference, removeOfficeReference } = useAppStore();
+    const { currentPersona, currentOffice, addFaceReference, removeFaceReference, addOfficeReference, removeOfficeReference, setPersona, setOffice } = useAppStore();
 
     useEffect(() => {
         if (initialSessionId) {
             setSessionId(initialSessionId);
             sessionService.getSessionById(initialSessionId).then(data => {
-                if (data) setSessionData(data);
+                if (!data) return;
+
+                setSessionData(data);
+
+                const sessionFaceAssets = data.faceReferences.map((reference, index) =>
+                    referenceUrlToPhotoAsset(reference, index, "face")
+                );
+                const sessionOfficeAssets = data.officeReferences.slice(0, 1).map((reference, index) =>
+                    referenceUrlToPhotoAsset(reference, index, "office")
+                );
+
+                setPersona({
+                    id: "default-persona",
+                    name: "My Profile",
+                    faceReferences: sessionFaceAssets,
+                });
+                setOffice({
+                    id: "default-office",
+                    name: "Main Office",
+                    officeReferences: sessionOfficeAssets,
+                });
             });
         }
-    }, [initialSessionId]);
+    }, [initialSessionId, setOffice, setPersona]);
 
     const faceAssets = currentPersona?.faceReferences || [];
     const officeAssets = currentOffice?.officeReferences || [];
@@ -119,11 +140,11 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                             >
                                 <PhotoUploader
                                     title="Twoje lokalizacje"
-                                    description="Wgraj zdjęcia swojego biura lub wybierz jedno z naszych wnętrz. AI umieści Cię w profesjonalnym otoczeniu biznesowym."
+                                    description="Wgraj jedno zdjęcie biura lub wybierz jedno z naszych wnętrz. Używamy jednej lokacji, aby uniknąć miksowania pomieszczeń."
                                     assets={officeAssets}
                                     onUpload={addOfficeReference}
                                     onRemove={removeOfficeReference}
-                                    maxFiles={5}
+                                    maxFiles={1}
                                     userId={user.uid}
                                     assetType="office"
                                 />
@@ -161,7 +182,7 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                         </motion.div>
                                         <div>
                                             <h2 className="text-3xl font-bold text-white tracking-tight">
-                                                {sessionData ? "Dogeneruj zdjęcia do wskazanej sesji!" : "Gotowy na sesję AI?"}
+                                                {sessionData ? "Kontynuuj wskazaną sesję" : "Gotowy na nową sesję?"}
                                             </h2>
                                             <p className="mx-auto mt-4 max-w-md text-zinc-400 leading-relaxed">
                                                 {sessionData
@@ -218,12 +239,12 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                         const resp = await fetch("/api/generate", {
                                                             method: "POST",
                                                             headers: { "Content-Type": "application/json" },
-                                                            body: JSON.stringify({
-                                                                sessionId: id,
-                                                                uid: user.uid,
-                                                                faceKeys: faceAssets.map(a => a.id),
-                                                                officeKeys: officeAssets.map(a => a.id),
-                                                            })
+                                                                body: JSON.stringify({
+                                                                    sessionId: id,
+                                                                    uid: user.uid,
+                                                                    faceKeys: faceAssets.map(a => a.id),
+                                                                    officeKeys: officeAssets.slice(0, 1).map(a => a.id),
+                                                                })
                                                         });
 
                                                         if (!resp.ok) {
@@ -293,7 +314,7 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                 {isGenerating ? (
                                                     <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/20 border-t-white mr-2" />
                                                 ) : null}
-                                                {sessionData ? "Dogeneruj +4 zdjęcia" : "Rozpocznij generowanie"}
+                                                {sessionData ? "Kontynuuj sesję (+4 zdjęcia)" : "Utwórz nową sesję (+4 zdjęcia)"}
                                             </Button>
 
                                             {sessionData && onNewSessionRequested && (
