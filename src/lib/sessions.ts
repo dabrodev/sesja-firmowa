@@ -12,6 +12,8 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 
+const DEFAULT_REQUESTED_COUNT = 4;
+
 export interface Photosession {
     id?: string;
     userId: string;
@@ -19,9 +21,47 @@ export interface Photosession {
     status: "draft" | "processing" | "completed" | "failed";
     faceReferences: string[];
     officeReferences: string[];
+    outfitReferences: string[];
+    customPrompt: string;
+    requestedCount: number;
     results: string[];
     createdAt: Timestamp;
     updatedAt: Timestamp;
+}
+
+function normalizeStringArray(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    return value.filter((item): item is string => typeof item === "string");
+}
+
+function normalizeRequestedCount(value: unknown): number {
+    if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_REQUESTED_COUNT;
+    return Math.min(5, Math.max(1, Math.round(value)));
+}
+
+function normalizeSession(docId: string, data: Record<string, unknown>): Photosession {
+    const status =
+        data.status === "draft" ||
+        data.status === "processing" ||
+        data.status === "completed" ||
+        data.status === "failed"
+            ? data.status
+            : "draft";
+
+    return {
+        id: docId,
+        userId: typeof data.userId === "string" ? data.userId : "",
+        name: typeof data.name === "string" ? data.name : "Sesja bez nazwy",
+        status,
+        faceReferences: normalizeStringArray(data.faceReferences),
+        officeReferences: normalizeStringArray(data.officeReferences),
+        outfitReferences: normalizeStringArray(data.outfitReferences),
+        customPrompt: typeof data.customPrompt === "string" ? data.customPrompt : "",
+        requestedCount: normalizeRequestedCount(data.requestedCount),
+        results: normalizeStringArray(data.results),
+        createdAt: data.createdAt instanceof Timestamp ? data.createdAt : Timestamp.fromMillis(0),
+        updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt : Timestamp.fromMillis(0),
+    };
 }
 
 export const sessionService = {
@@ -38,6 +78,12 @@ export const sessionService = {
                 ...data,
                 userId,
                 name: finalName,
+                faceReferences: data.faceReferences ?? [],
+                officeReferences: data.officeReferences ?? [],
+                outfitReferences: data.outfitReferences ?? [],
+                customPrompt: data.customPrompt ?? "",
+                requestedCount: normalizeRequestedCount(data.requestedCount),
+                results: data.results ?? [],
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
                 status: data.status || "draft",
@@ -83,10 +129,9 @@ export const sessionService = {
                 where("userId", "==", userId)
             );
             const querySnapshot = await getDocs(q);
-            const sessions = querySnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            })) as Photosession[];
+            const sessions = querySnapshot.docs.map((doc) =>
+                normalizeSession(doc.id, doc.data() as Record<string, unknown>)
+            );
 
             return sessions.sort((a, b) => {
                 const timeA = a.createdAt?.toMillis() || 0;
@@ -106,10 +151,7 @@ export const sessionService = {
             const docSnap = await getDoc(docRef);
 
             if (docSnap.exists()) {
-                return {
-                    id: docSnap.id,
-                    ...docSnap.data()
-                } as Photosession;
+                return normalizeSession(docSnap.id, docSnap.data() as Record<string, unknown>);
             }
             return null;
         } catch (error) {

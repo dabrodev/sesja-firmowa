@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle2, Search, Trash2, Shield } from "lucide-react";
 import { assetService } from "@/lib/assets";
-import { PhotoAsset } from "@/lib/store";
+import { AssetType, PhotoAsset } from "@/lib/store";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -13,7 +13,7 @@ interface AssetGalleryModalProps {
     isOpen: boolean;
     onClose: () => void;
     userId: string;
-    type: "face" | "office";
+    type: AssetType;
     onSelect: (assets: PhotoAsset[]) => void;
     maxSelectable?: number;
     currentSelected?: PhotoAsset[];
@@ -33,6 +33,8 @@ export function AssetGalleryModal({
     const [selectedIds, setSelectedIds] = useState<Set<string>>(
         new Set(currentSelected.map(a => a.id))
     );
+
+    const assetLabel = type === "face" ? "twarzy" : type === "office" ? "biura" : "ubioru";
 
     const loadAssets = useCallback(async () => {
         setIsLoading(true);
@@ -103,7 +105,7 @@ export function AssetGalleryModal({
                             Wybierz z Galerii
                         </DialogTitle>
                         <DialogDescription className="text-zinc-400 text-base">
-                            Wybierz wcześniej wgrane zdjęcia {type === "face" ? "twarzy" : "biura"},
+                            Wybierz wcześniej wgrane zdjęcia {assetLabel},
                             aby użyć ich w nowej sesji. Możesz zaznaczyć do {maxSelectable} plików.
                         </DialogDescription>
                     </DialogHeader>
@@ -122,7 +124,7 @@ export function AssetGalleryModal({
                             </div>
                             <h3 className="text-xl font-medium text-white">Galeria jest pusta</h3>
                             <p className="text-zinc-400">
-                                Nie masz jeszcze zapisanych zdjęć {type === "face" ? "twarzy" : "biura"} w swojej chmurze. Zostaną one tu automatycznie dodane, gdy wgrasz je z komputera w generatorze.
+                                Nie masz jeszcze zapisanych zdjęć {assetLabel} w swojej chmurze. Zostaną one tu automatycznie dodane, gdy wgrasz je z komputera w generatorze.
                             </p>
                             <Button variant="outline" onClick={onClose} className="mt-4 border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white">
                                 Wróć do wgrywania

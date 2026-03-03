@@ -5,6 +5,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import { User, Building2, Sparkles, ChevronRight, ChevronLeft, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { useAppStore } from "@/lib/store";
 import { PhotoUploader } from "@/components/photo-uploader";
 import { GenerationResults } from "@/components/generation-results";
@@ -16,6 +24,7 @@ import { CopyPlus } from "lucide-react";
 import { referenceUrlToPhotoAsset } from "@/lib/reference-assets";
 
 type WizardStepId = "face" | "office" | "generate";
+const COST_PER_PHOTO = 30;
 
 export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequested }: { sessionId?: string, onNewSessionRequested?: () => void }) {
     const [step, setStep] = useState<WizardStepId>("face");
@@ -25,8 +34,23 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
     const [resultUrls, setResultUrls] = useState<string[]>([]);
     const [generationStatus, setGenerationStatus] = useState<string>("Inicjalizuję...");
     const [sessionData, setSessionData] = useState<Photosession | null>(null);
+    const [customPrompt, setCustomPrompt] = useState("");
+    const [requestedCount, setRequestedCount] = useState(4);
     const { user, userProfile } = useAuth();
-    const { currentPersona, currentOffice, addFaceReference, removeFaceReference, addOfficeReference, removeOfficeReference, setPersona, setOffice } = useAppStore();
+    const {
+        currentPersona,
+        currentOffice,
+        currentOutfit,
+        addFaceReference,
+        removeFaceReference,
+        addOfficeReference,
+        removeOfficeReference,
+        addOutfitReference,
+        removeOutfitReference,
+        setPersona,
+        setOffice,
+        setOutfit
+    } = useAppStore();
 
     useEffect(() => {
         if (initialSessionId) {
@@ -42,6 +66,9 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                 const sessionOfficeAssets = data.officeReferences.slice(0, 1).map((reference, index) =>
                     referenceUrlToPhotoAsset(reference, index, "office")
                 );
+                const sessionOutfitAssets = data.outfitReferences.map((reference, index) =>
+                    referenceUrlToPhotoAsset(reference, index, "outfit")
+                );
 
                 setPersona({
                     id: "default-persona",
@@ -53,18 +80,32 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                     name: "Main Office",
                     officeReferences: sessionOfficeAssets,
                 });
+                setOutfit({
+                    id: "default-outfit",
+                    name: "Outfit References",
+                    outfitReferences: sessionOutfitAssets,
+                });
+                setCustomPrompt(data.customPrompt);
+                setRequestedCount(data.requestedCount);
             });
+        } else {
+            setSessionId(null);
+            setSessionData(null);
+            setCustomPrompt("");
+            setRequestedCount(4);
         }
-    }, [initialSessionId, setOffice, setPersona]);
+    }, [initialSessionId, setOffice, setOutfit, setPersona]);
 
     const faceAssets = currentPersona?.faceReferences || [];
     const officeAssets = currentOffice?.officeReferences || [];
+    const outfitAssets = currentOutfit?.outfitReferences || [];
 
     const steps: { id: WizardStepId; label: string; icon: React.ReactNode; completed: boolean }[] = [
         { id: "face", label: "Wizerunek", icon: <User className="h-4 w-4" />, completed: faceAssets.length >= 1 },
-        { id: "office", label: "Biuro", icon: <Building2 className="h-4 w-4" />, completed: officeAssets.length >= 1 },
+        { id: "office", label: "Biuro i styl", icon: <Building2 className="h-4 w-4" />, completed: officeAssets.length >= 1 },
         { id: "generate", label: "Generuj", icon: <Sparkles className="h-4 w-4" />, completed: hasCompleted }
     ];
+    const totalCost = requestedCount * COST_PER_PHOTO;
 
     if (!user) {
         return null;
@@ -124,7 +165,7 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                         onClick={() => setStep("office")}
                                         className="bg-blue-600 hover:bg-blue-700 h-12 px-8 shadow-lg shadow-blue-500/20"
                                     >
-                                        dalej: biuro i lokalizacja <ChevronRight className="ml-2 h-4 w-4" />
+                                        dalej: biuro i ubiór <ChevronRight className="ml-2 h-4 w-4" />
                                     </Button>
                                 </div>
                             </motion.div>
@@ -148,6 +189,16 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                     userId={user.uid}
                                     assetType="office"
                                 />
+                                <PhotoUploader
+                                    title="Referencje ubioru (opcjonalnie)"
+                                    description="Dodaj zdjęcia ubrań lub stylizacji (np. koszula, spodnie, spódnica), aby AI trzymało spójny dress code."
+                                    assets={outfitAssets}
+                                    onUpload={addOutfitReference}
+                                    onRemove={removeOutfitReference}
+                                    maxFiles={6}
+                                    userId={user.uid}
+                                    assetType="outfit"
+                                />
                                 <div className="flex justify-between">
                                     <Button variant="ghost" onClick={() => setStep("face")} className="text-zinc-400 hover:bg-white/5">
                                         <ChevronLeft className="mr-2 h-4 w-4" /> Wróć do zdjęć twarzy
@@ -157,7 +208,7 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                         onClick={() => setStep("generate")}
                                         className="bg-gradient-to-br from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 h-12 px-8 shadow-lg shadow-blue-500/20 text-white border border-white/10"
                                     >
-                                        dalej: podsumowanie <ChevronRight className="ml-2 h-4 w-4" />
+                                        dalej: prompt i start <ChevronRight className="ml-2 h-4 w-4" />
                                     </Button>
                                 </div>
                             </motion.div>
@@ -186,12 +237,12 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                             </h2>
                                             <p className="mx-auto mt-4 max-w-md text-zinc-400 leading-relaxed">
                                                 {sessionData
-                                                    ? `Kreator jest w trybie kontynuacji sesji "${sessionData.name}". Za chwilę dołożymy kolejne 4 ujęcia w podanym biurze z Twoim wizerunkiem.`
+                                                    ? `Kreator jest w trybie kontynuacji sesji "${sessionData.name}". Wskaż ile nowych ujęć dodać oraz opcjonalny prompt tekstowy.`
                                                     : "Wszystkie dane zostały przygotowane. System AI przeanalizuje twoje rysy i stworzy fotorealistyczną sesję w wybranych wnętrzach."}
                                             </p>
                                         </div>
 
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-md mx-auto">
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-3xl mx-auto">
                                             <div className="rounded-2xl bg-white/5 p-5 border border-white/10 text-left hover:border-blue-500/30 transition-all group">
                                                 <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 group-hover:text-blue-400 transition-colors">Postać</span>
                                                 <div className="mt-1 text-lg font-medium text-white">{faceAssets.length} zdjęć referencyjnych</div>
@@ -200,15 +251,65 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                 <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 group-hover:text-blue-400 transition-colors">Otoczenie</span>
                                                 <div className="mt-1 text-lg font-medium text-white">{officeAssets.length} lokalizacji biurowej</div>
                                             </div>
+                                            <div className="rounded-2xl bg-white/5 p-5 border border-white/10 text-left hover:border-blue-500/30 transition-all group">
+                                                <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-500 group-hover:text-blue-400 transition-colors">Ubiór</span>
+                                                <div className="mt-1 text-lg font-medium text-white">{outfitAssets.length} referencji stylu</div>
+                                            </div>
                                         </div>
 
-                                        <div className="flex flex-col items-center gap-4 pt-10">
+                                        <div className="mx-auto w-full max-w-2xl space-y-4 rounded-2xl border border-white/10 bg-black/20 p-5 text-left">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div className="space-y-2">
+                                                    <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                                                        Liczba zdjęć
+                                                    </label>
+                                                    <Select
+                                                        value={String(requestedCount)}
+                                                        onValueChange={(value) => setRequestedCount(Number(value))}
+                                                    >
+                                                        <SelectTrigger className="h-11 border-white/10 bg-white/5 text-white">
+                                                            <SelectValue placeholder="Wybierz liczbę zdjęć" />
+                                                        </SelectTrigger>
+                                                        <SelectContent className="border-white/10 bg-[#0f172a] text-white">
+                                                            {["1", "2", "3", "4", "5"].map((value) => (
+                                                                <SelectItem key={value} value={value}>
+                                                                    {value} zdjęć
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 px-4 py-3 text-sm">
+                                                    <div className="text-zinc-300">Koszt tej generacji</div>
+                                                    <div className="mt-1 text-2xl font-semibold text-white">{totalCost} PKT</div>
+                                                    <div className="text-xs text-zinc-400">{COST_PER_PHOTO} PKT za każde zdjęcie</div>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <label htmlFor="session-custom-prompt" className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                                                    Prompt tekstowy (opcjonalnie)
+                                                </label>
+                                                <Textarea
+                                                    id="session-custom-prompt"
+                                                    value={customPrompt}
+                                                    onChange={(e) => setCustomPrompt(e.target.value)}
+                                                    placeholder="Np. osoba pracująca przy biurku, spokojny wyraz twarzy, formalna koszula, styl editorial."
+                                                    className="min-h-[110px] border-white/10 bg-white/5 text-white placeholder:text-zinc-500"
+                                                />
+                                                <p className="text-xs text-zinc-500">
+                                                    Ten tekst doprecyzowuje pozę, styl i ubiór. To kontynuacja sesji, nie osobny generator.
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-col items-center gap-4 pt-4">
                                             <Button
                                                 size="lg"
-                                                disabled={isGenerating || (userProfile ? userProfile.credits < 120 : true)}
+                                                disabled={isGenerating || (userProfile ? userProfile.credits < totalCost : true)}
                                                 onClick={async () => {
                                                     if (!user) return;
-                                                    const cost = 120; // 4 photos × 30 pts
+                                                    const cost = requestedCount * COST_PER_PHOTO;
 
                                                     if (userProfile && userProfile.credits < cost) {
                                                         alert("Brak punktów. Potrzebujesz " + cost + " pkt.");
@@ -216,35 +317,50 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                     }
 
                                                     setIsGenerating(true);
+                                                    setHasCompleted(false);
+                                                    setResultUrls([]);
                                                     setGenerationStatus("Inicjalizuję sesję...");
 
+                                                    let activeSessionId: string | null = sessionId;
                                                     try {
-                                                        let id = sessionId;
+                                                        const trimmedPrompt = customPrompt.trim();
+                                                        const sessionUpdatePayload = {
+                                                            faceReferences: faceAssets.map((a) => a.url),
+                                                            officeReferences: officeAssets.slice(0, 1).map((a) => a.url),
+                                                            outfitReferences: outfitAssets.map((a) => a.url),
+                                                            customPrompt: trimmedPrompt,
+                                                            requestedCount,
+                                                            status: "processing" as const,
+                                                        };
 
-                                                        if (!id) {
-                                                            id = await sessionService.saveSession(user.uid, {
-                                                                faceReferences: faceAssets.map(a => a.url),
-                                                                officeReferences: officeAssets.map(a => a.url),
+                                                        if (!activeSessionId) {
+                                                            activeSessionId = await sessionService.saveSession(user.uid, {
+                                                                ...sessionUpdatePayload,
                                                                 results: [],
-                                                                status: "processing",
                                                                 name: "" // backend will auto-assign "Sesja X (Data)"
                                                             });
-                                                            setSessionId(id);
+                                                            setSessionId(activeSessionId);
                                                         } else {
-                                                            await sessionService.updateSession(id, { status: "processing" });
+                                                            await sessionService.updateSession(activeSessionId, sessionUpdatePayload);
                                                         }
+
                                                         await userService.deductCredits(user.uid, cost);
 
                                                         setGenerationStatus("Uruchamiam workflow...");
+                                                        const runId = `${Date.now()}-${Math.round(Math.random() * 10_000)}`;
                                                         const resp = await fetch("/api/generate", {
                                                             method: "POST",
                                                             headers: { "Content-Type": "application/json" },
-                                                                body: JSON.stringify({
-                                                                    sessionId: id,
-                                                                    uid: user.uid,
-                                                                    faceKeys: faceAssets.map(a => a.id),
-                                                                    officeKeys: officeAssets.slice(0, 1).map(a => a.id),
-                                                                })
+                                                            body: JSON.stringify({
+                                                                sessionId: activeSessionId,
+                                                                uid: user.uid,
+                                                                faceKeys: faceAssets.map((a) => a.id),
+                                                                officeKeys: officeAssets.slice(0, 1).map((a) => a.id),
+                                                                outfitKeys: outfitAssets.map((a) => a.id),
+                                                                customPrompt: trimmedPrompt,
+                                                                requestedCount,
+                                                                runId,
+                                                            })
                                                         });
 
                                                         if (!resp.ok) {
@@ -261,31 +377,40 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                             const poll = setInterval(async () => {
                                                                 attempts++;
                                                                 try {
-                                                                    const sr = await fetch(`/api/status?instanceId=${encodeURIComponent(instanceId)}`);
+                                                                    const sr = await fetch(
+                                                                        `/api/status?instanceId=${encodeURIComponent(instanceId)}&runId=${encodeURIComponent(runId)}`
+                                                                    );
                                                                     const data = await sr.json() as { status: string; output?: { resultUrls: string[] }; error?: string };
 
-                                                                    if (attempts < 5) setGenerationStatus("Generuję opis fotograficzny...");
-                                                                    else if (attempts < 15) setGenerationStatus("Generuję fotografię 1/4...");
-                                                                    else if (attempts < 25) setGenerationStatus("Generuję fotografię 2/4...");
-                                                                    else if (attempts < 35) setGenerationStatus("Generuję fotografię 3/4...");
-                                                                    else setGenerationStatus("Generuję fotografię 4/4...");
+                                                                    if (attempts < 5) {
+                                                                        setGenerationStatus("Generuję opis fotograficzny...");
+                                                                    } else {
+                                                                        const generatedCount = data.output?.resultUrls?.length ?? 0;
+                                                                        const currentShot = Math.min(generatedCount + 1, requestedCount);
+                                                                        setGenerationStatus(`Generuję fotografię ${currentShot}/${requestedCount}...`);
+                                                                    }
 
                                                                     if (data.output?.resultUrls?.length) {
                                                                         const urls = data.output.resultUrls;
                                                                         setResultUrls(urls);
-                                                                        if (!hasCompleted) setHasCompleted(true);
+                                                                        if (!hasCompleted) {
+                                                                            setHasCompleted(true);
+                                                                        }
                                                                     }
 
                                                                     if (data.status === "complete") {
                                                                         clearInterval(poll);
-                                                                        if (!id) {
+                                                                        if (!activeSessionId) {
                                                                             throw new Error("Nie udało się zapisać sesji.");
                                                                         }
-                                                                        // Depending on logic, we append rather than overwrite
                                                                         if (sessionId) {
-                                                                            await sessionService.appendResults(id, data.output?.resultUrls || []);
+                                                                            await sessionService.appendResults(activeSessionId, data.output?.resultUrls || []);
+                                                                            await sessionService.updateSession(activeSessionId, { status: "completed" });
                                                                         } else {
-                                                                            await sessionService.updateSession(id, { results: data.output?.resultUrls || [], status: "completed" });
+                                                                            await sessionService.updateSession(activeSessionId, {
+                                                                                results: data.output?.resultUrls || [],
+                                                                                status: "completed"
+                                                                            });
                                                                         }
                                                                         setIsGenerating(false);
                                                                         resolve();
@@ -305,6 +430,9 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
 
                                                     } catch (error: unknown) {
                                                         console.error("Failed to generate:", error);
+                                                        if (activeSessionId) {
+                                                            await sessionService.updateSession(activeSessionId, { status: "failed" });
+                                                        }
                                                         alert("Błąd generowania: " + (error instanceof Error ? error.message : "Nieznany błąd"));
                                                         setIsGenerating(false);
                                                     }
@@ -314,7 +442,7 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                 {isGenerating ? (
                                                     <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/20 border-t-white mr-2" />
                                                 ) : null}
-                                                {sessionData ? "Kontynuuj sesję (+4 zdjęcia)" : "Utwórz nową sesję (+4 zdjęcia)"}
+                                                {sessionData ? `Kontynuuj sesję (+${requestedCount} zdjęć)` : `Utwórz nową sesję (+${requestedCount} zdjęć)`}
                                             </Button>
 
                                             {sessionData && onNewSessionRequested && (
@@ -324,7 +452,7 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                 </Button>
                                             )}
 
-                                            <p className="text-xs text-zinc-500">koszt: 120 PKT za 4 fotografie AI</p>
+                                            <p className="text-xs text-zinc-500">koszt: {totalCost} PKT za {requestedCount} fotografii AI</p>
                                             <Button variant="ghost" onClick={() => setStep("office")} className="text-zinc-500 hover:text-white transition-colors">
                                                 <ChevronLeft className="mr-2 h-4 w-4" /> Wróć do edycji parametrów
                                             </Button>
@@ -359,7 +487,13 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                     </div>
                                 ) : null}
 
-                                {hasCompleted && <GenerationResults sessionId={sessionId} resultUrls={resultUrls} />}
+                                {hasCompleted && (
+                                    <GenerationResults
+                                        sessionId={sessionId}
+                                        resultUrls={resultUrls}
+                                        expectedCount={requestedCount}
+                                    />
+                                )}
                             </motion.div>
                         )}
                     </AnimatePresence>

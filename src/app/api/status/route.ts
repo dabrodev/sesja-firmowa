@@ -7,6 +7,7 @@ function getErrorMessage(error: unknown, fallback: string): string {
 export async function GET(req: NextRequest) {
     try {
         const instanceId = req.nextUrl.searchParams.get("instanceId");
+        const runId = req.nextUrl.searchParams.get("runId");
         if (!instanceId) {
             return NextResponse.json({ error: "Missing instanceId" }, { status: 400 });
         }
@@ -16,7 +17,13 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: "Worker URL not configured" }, { status: 500 });
         }
 
-        const resp = await fetch(`${workerUrl}/status?instanceId=${encodeURIComponent(instanceId)}`);
+        const workerStatusUrl = new URL(`${workerUrl}/status`);
+        workerStatusUrl.searchParams.set("instanceId", instanceId);
+        if (runId) {
+            workerStatusUrl.searchParams.set("runId", runId);
+        }
+
+        const resp = await fetch(workerStatusUrl.toString());
         const data = await resp.json() as { status: string; output?: { resultUrls: string[] }; error?: string };
 
         return NextResponse.json(data);

@@ -20,7 +20,7 @@ export function extractR2KeyFromReference(reference: string): string | null {
 export function referenceUrlToPhotoAsset(
     reference: string,
     index: number,
-    type: "face" | "office"
+    type: "face" | "office" | "outfit"
 ): PhotoAsset {
     const key = extractR2KeyFromReference(reference);
     const filename = key?.split("/").pop() || `${type}-reference-${index + 1}.jpg`;

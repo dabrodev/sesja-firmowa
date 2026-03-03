@@ -20,6 +20,10 @@ type GenerateParams = {
     uid: string;
     faceKeys: string[];
     officeKeys: string[];
+    outfitKeys?: string[];
+    customPrompt?: string;
+    requestedCount?: number;
+    runId?: string;
 };
 
 type WorkerUrl = "https://sesja-firmowa.damiandabrodev.workers.dev";
@@ -43,30 +47,53 @@ const CORS_HEADERS = {
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
+const BASE_VARIATIONS = [
+    "Scene: person looking directly at camera, upper body framing, natural moment between tasks. Maintain their EXACT natural facial expression from the reference photos — do not alter it.",
+    "Scene: person working at laptop or reviewing documents at their desk, slightly angled, candid moment of focused work. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: person in mid-conversation or presenting — gesturing naturally or leaning forward, engaged posture, 3/4 body framing. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: person standing near a window or by their workspace, looking thoughtfully to the side, candid documentary-style framing. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: person walking through the office corridor with confident posture, documentary-style motion freeze, business editorial framing. Maintain their EXACT natural facial expression from the reference photos.",
+];
+
+function normalizeRequestedCount(value: number | undefined): number {
+    if (typeof value !== "number" || !Number.isFinite(value)) return 4;
+    return Math.min(5, Math.max(1, Math.round(value)));
+}
+
 // ─── Cloudflare Workflow ──────────────────────────────────────────────────────
 
 export class GenerationWorkflow extends WorkflowEntrypoint<Env, GenerateParams> {
     async run(event: WorkflowEvent<GenerateParams>, step: WorkflowStep) {
-        const { sessionId, faceKeys, officeKeys } = event.payload;
+        const {
+            sessionId,
+            faceKeys,
+            officeKeys,
+            outfitKeys = [],
+            customPrompt = "",
+            requestedCount,
+            runId,
+        } = event.payload;
+        const safeRequestedCount = normalizeRequestedCount(requestedCount);
+        const safeRunId = runId?.trim() || Date.now().toString();
 
         // Step 1: Generate a tailored prompt using Azure OpenAI
         const prompt = await step.do("generate-prompt", {
             retries: { limit: 3, delay: "5 seconds", backoff: "exponential" },
         }, async () => {
-            return await generatePromptWithAzure(this.env, faceKeys.length, officeKeys.length);
+            return await generatePromptWithAzure(
+                this.env,
+                faceKeys.length,
+                officeKeys.length,
+                outfitKeys.length,
+                customPrompt
+            );
         });
 
         const workerUrl = WORKER_URL;
         const resultKeys: string[] = [];
 
-        // Steps 2-5: Generate each variation independently (1 step per image)
-        // Variations = pose/angle/framing — NOT expression (preserve natural expression from reference photos)
-        const variations = [
-            "Scene: person looking directly at camera, upper body framing, natural moment between tasks. Maintain their EXACT natural facial expression from the reference photos — do not alter it.",
-            "Scene: person working at laptop or reviewing documents at their desk, slightly angled, candid moment of focused work. Maintain their EXACT natural facial expression from the reference photos.",
-            "Scene: person in mid-conversation or presenting — gesturing naturally or leaning forward, engaged posture, 3/4 body framing. Maintain their EXACT natural facial expression from the reference photos.",
-            "Scene: person standing near a window or by their workspace, looking thoughtfully to the side, candid documentary-style framing. Maintain their EXACT natural facial expression from the reference photos.",
-        ];
+        // Generate requested number of variations (1-5)
+        const variations = BASE_VARIATIONS.slice(0, safeRequestedCount);
 
         for (let i = 0; i < variations.length; i++) {
             const variation = variations[i];
@@ -74,16 +101,26 @@ export class GenerationWorkflow extends WorkflowEntrypoint<Env, GenerateParams> 
                 retries: { limit: 2, delay: "10 seconds", backoff: "linear" },
             }, async () => {
                 // Fetch reference images fresh from R2 in each step
-                const [faceImages, officeImages] = await Promise.all([
+                const [faceImages, officeImages, outfitImages] = await Promise.all([
                     fetchImagesFromR2(this.env, faceKeys.slice(0, 4)),
                     fetchImagesFromR2(this.env, officeKeys.slice(0, 2)),
+                    outfitKeys.length
+                        ? fetchImagesFromR2(this.env, outfitKeys.slice(0, 6))
+                        : Promise.resolve<{ base64: string; mimeType: string }[]>([]),
                 ]);
 
                 // Generate one image with Gemini
-                const base64Image = await generateOneImage(this.env, prompt, variation, faceImages, officeImages);
+                const base64Image = await generateOneImage(
+                    this.env,
+                    prompt,
+                    variation,
+                    faceImages,
+                    officeImages,
+                    outfitImages
+                );
 
                 // Save immediately to R2 — return only the key (small string)
-                const resultKey = `results/${sessionId}/photo-${i + 1}.jpg`;
+                const resultKey = `results/${sessionId}/${safeRunId}/photo-${i + 1}.jpg`;
                 if (base64Image) {
                     const imageData = base64ToArrayBuffer(base64Image);
                     await this.env.MEDIA_BUCKET.put(resultKey, imageData, {
@@ -158,9 +195,32 @@ const workerHandler = {
             }
             try {
                 const body = await request.json() as GenerateParams;
-                const { sessionId, uid, faceKeys, officeKeys } = body;
+                const {
+                    sessionId,
+                    uid,
+                    faceKeys,
+                    officeKeys,
+                    outfitKeys = [],
+                    customPrompt = "",
+                    requestedCount,
+                    runId,
+                } = body;
+                const normalizedCustomPrompt =
+                    typeof customPrompt === "string" ? customPrompt.trim() : "";
+                const normalizedRunId =
+                    typeof runId === "string" && runId.trim().length > 0
+                        ? runId.trim()
+                        : Date.now().toString();
 
-                if (!sessionId || !uid || !faceKeys?.length || !officeKeys?.length) {
+                if (
+                    !sessionId ||
+                    !uid ||
+                    !faceKeys?.length ||
+                    !officeKeys?.length ||
+                    !Array.isArray(faceKeys) ||
+                    !Array.isArray(officeKeys) ||
+                    !Array.isArray(outfitKeys)
+                ) {
                     return new Response(JSON.stringify({ error: "Missing required fields" }), {
                         status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
                     });
@@ -169,7 +229,16 @@ const workerHandler = {
                 // Create workflow instance — runs in background
                 const instance = await env.GENERATION_WORKFLOW.create({
                     id: sessionId,
-                    params: { sessionId, uid, faceKeys, officeKeys },
+                    params: {
+                        sessionId,
+                        uid,
+                        faceKeys,
+                        officeKeys,
+                        outfitKeys,
+                        customPrompt: normalizedCustomPrompt,
+                        requestedCount: normalizeRequestedCount(requestedCount),
+                        runId: normalizedRunId,
+                    },
                 });
 
                 return new Response(JSON.stringify({ instanceId: instance.id, status: "queued" }), {
@@ -263,6 +332,7 @@ const workerHandler = {
         // Poll workflow status
         if (url.pathname === "/status") {
             const instanceId = url.searchParams.get("instanceId");
+            const runId = url.searchParams.get("runId");
             if (!instanceId) {
                 return new Response(JSON.stringify({ error: "Missing instanceId" }), {
                     status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
@@ -274,8 +344,11 @@ const workerHandler = {
 
                 let partialUrls: string[] = [];
                 if (status.status !== "complete") {
-                    const list = await env.MEDIA_BUCKET.list({ prefix: `results/${instanceId}/` });
-                    partialUrls = list.objects.map(o => `${WORKER_URL}/file?key=${encodeURIComponent(o.key)}`);
+                    const prefix = runId ? `results/${instanceId}/${runId}/` : `results/${instanceId}/`;
+                    const list = await env.MEDIA_BUCKET.list({ prefix });
+                    partialUrls = list.objects
+                        .sort((a, b) => a.key.localeCompare(b.key))
+                        .map((o) => `${WORKER_URL}/file?key=${encodeURIComponent(o.key)}`);
                 }
 
                 return new Response(JSON.stringify({
@@ -347,18 +420,27 @@ async function fetchImagesFromR2(env: Env, keys: string[]): Promise<{ base64: st
 
 // ─── Generate prompt with Azure OpenAI ───────────────────────────────────────
 
-async function generatePromptWithAzure(env: Env, faceCount: number, officeCount: number): Promise<string> {
+async function generatePromptWithAzure(
+    env: Env,
+    faceCount: number,
+    officeCount: number,
+    outfitCount: number,
+    customPrompt: string
+): Promise<string> {
     const systemPrompt = `You are a professional photography prompt engineer specializing in corporate business photo sessions.
 Create a prompt for a high-end business photo session — NOT a passport or ID headshot.`;
 
-    const userMessage = `I have ${faceCount} face reference photo(s) and ${officeCount} office/workspace reference photo(s).
+    const customPromptText = customPrompt.trim();
+    const userMessage = `I have ${faceCount} face reference photo(s), ${officeCount} office/workspace reference photo(s), and ${outfitCount} outfit reference photo(s).
 
 Generate a photorealistic business photo session prompt that instructs the AI to:
 1. Preserve EXACTLY: the person's face structure, skin tone, hair color/style, and any visible clothing/outfit from the reference photos
 2. CRITICAL: Preserve the person's NATURAL facial expression from the reference photos — do NOT add a smile or change their expression
 3. Place the person in the EXACT office environment shown in the office reference photos (same walls, furniture, lighting setup, color palette)
 4. Photography style: natural window light blended with soft studio fill, 85mm lens, f/2.0 bokeh, full or 3/4 body framing
-5. Result: a polished, high-end corporate business photo suitable for LinkedIn, press materials, and company websites
+5. If outfit references are provided, match their style, cut, texture, and color palette as closely as possible
+6. Result: a polished, high-end corporate business photo suitable for LinkedIn, press materials, and company websites
+${customPromptText ? `7. Additional user direction to include when it does not conflict with identity consistency: ${customPromptText}` : ""}
 
 Generate ONLY the image prompt text. 2-3 sentences maximum.`;
 
@@ -380,15 +462,20 @@ Generate ONLY the image prompt text. 2-3 sentences maximum.`;
 
     if (!resp.ok) {
         console.error("Azure OpenAI error:", await resp.text());
-        return getDefaultPrompt();
+        return getDefaultPrompt(customPromptText);
     }
 
     const data = await resp.json() as AzureChatCompletionResponse;
-    return data.choices?.[0]?.message?.content || getDefaultPrompt();
+    return data.choices?.[0]?.message?.content || getDefaultPrompt(customPromptText);
 }
 
-function getDefaultPrompt(): string {
-    return `Photorealistic professional business photo session. Preserve the person's exact face, skin tone, hair, clothing, and NATURAL EXPRESSION from the reference photos — do not alter their expression. Place them in the exact office environment shown in the workspace reference photos. Natural window light with soft studio fill, 85mm f/2.0, warm professional color grading.`;
+function getDefaultPrompt(customPrompt: string): string {
+    const trimmedCustomPrompt = customPrompt.trim();
+    const customLine = trimmedCustomPrompt
+        ? `Respect this additional creative direction from the user: ${trimmedCustomPrompt}.`
+        : "";
+
+    return `Photorealistic professional business photo session. Preserve the person's exact face, skin tone, hair, clothing, and NATURAL EXPRESSION from the reference photos — do not alter their expression. Place them in the exact office environment shown in the workspace reference photos. Natural window light with soft studio fill, 85mm f/2.0, warm professional color grading. ${customLine}`.trim();
 }
 
 // ─── Generate one image with Gemini ──────────────────────────────────────────
@@ -398,7 +485,8 @@ async function generateOneImage(
     prompt: string,
     variation: string,
     faceImages: { base64: string; mimeType: string }[],
-    officeImages: { base64: string; mimeType: string }[]
+    officeImages: { base64: string; mimeType: string }[],
+    outfitImages: { base64: string; mimeType: string }[]
 ): Promise<string> {  // throws on failure — workflow will retry
     const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 
@@ -416,6 +504,15 @@ async function generateOneImage(
     });
     for (const img of officeImages) {
         parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
+    }
+
+    if (outfitImages.length > 0) {
+        parts.push({
+            text: `OUTFIT REFERENCE PHOTOS (${outfitImages.length} images):\nUse these as wardrobe guidance. Prioritize similar clothing silhouette, color palette, fabrics, and styling details.`,
+        });
+        for (const img of outfitImages) {
+            parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
+        }
     }
 
     parts.push({

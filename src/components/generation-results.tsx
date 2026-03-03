@@ -9,9 +9,10 @@ import { useAppStore } from "@/lib/store";
 interface GenerationResultsProps {
     sessionId?: string | null;
     resultUrls?: string[];
+    expectedCount?: number;
 }
 
-export function GenerationResults({ sessionId, resultUrls = [] }: GenerationResultsProps) {
+export function GenerationResults({ sessionId, resultUrls = [], expectedCount = 4 }: GenerationResultsProps) {
     const { resetSession } = useAppStore();
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
@@ -33,13 +34,13 @@ export function GenerationResults({ sessionId, resultUrls = [] }: GenerationResu
             </div>
 
             <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-                {Array.from({ length: 4 }).map((_, i) => {
+                {Array.from({ length: expectedCount }).map((_, i) => {
                     const url = resultUrls[i];
 
                     if (!url) {
                         return (
                             <div key={`skeleton-${i}`} className="aspect-[3/4] rounded-2xl border border-white/5 bg-white/5 animate-pulse flex flex-col items-center justify-center">
-                                <span className="text-white/30 text-sm mb-2">Generowanie ({i + 1}/4)...</span>
+                                <span className="text-white/30 text-sm mb-2">Generowanie ({i + 1}/{expectedCount})...</span>
                                 <div className="h-6 w-6 border-2 border-blue-500/50 border-t-blue-500 rounded-full animate-spin" />
                             </div>
                         );

@@ -9,6 +9,8 @@ export interface PhotoAsset {
     size: number;
 }
 
+export type AssetType = "face" | "office" | "outfit";
+
 export interface Persona {
     id: string;
     name: string;
@@ -21,18 +23,28 @@ export interface Office {
     officeReferences: PhotoAsset[];
 }
 
+export interface Outfit {
+    id: string;
+    name: string;
+    outfitReferences: PhotoAsset[];
+}
+
 interface AppState {
     currentPersona: Persona | null;
     currentOffice: Office | null;
+    currentOutfit: Outfit | null;
     sessions: Photosession[]; // Placeholder for session history
 
     // Actions
     setPersona: (persona: Persona | null) => void;
     setOffice: (office: Office | null) => void;
+    setOutfit: (outfit: Outfit | null) => void;
     addFaceReference: (asset: PhotoAsset) => void;
     addOfficeReference: (asset: PhotoAsset) => void;
+    addOutfitReference: (asset: PhotoAsset) => void;
     removeFaceReference: (id: string) => void;
     removeOfficeReference: (id: string) => void;
+    removeOutfitReference: (id: string) => void;
     resetSession: () => void;
 }
 
@@ -49,10 +61,16 @@ export const useAppStore = create<AppState>()(
                 name: "Main Office",
                 officeReferences: [],
             },
+            currentOutfit: {
+                id: "default-outfit",
+                name: "Outfit References",
+                outfitReferences: [],
+            },
             sessions: [],
 
             setPersona: (persona) => set({ currentPersona: persona }),
             setOffice: (office) => set({ currentOffice: office }),
+            setOutfit: (outfit) => set({ currentOutfit: outfit }),
 
             addFaceReference: (asset) =>
                 set((state) => ({
@@ -65,6 +83,13 @@ export const useAppStore = create<AppState>()(
                 set((state) => ({
                     currentOffice: state.currentOffice
                         ? { ...state.currentOffice, officeReferences: [...state.currentOffice.officeReferences, asset] }
+                        : null
+                })),
+
+            addOutfitReference: (asset) =>
+                set((state) => ({
+                    currentOutfit: state.currentOutfit
+                        ? { ...state.currentOutfit, outfitReferences: [...state.currentOutfit.outfitReferences, asset] }
                         : null
                 })),
 
@@ -82,6 +107,13 @@ export const useAppStore = create<AppState>()(
                         : null
                 })),
 
+            removeOutfitReference: (id) =>
+                set((state) => ({
+                    currentOutfit: state.currentOutfit
+                        ? { ...state.currentOutfit, outfitReferences: state.currentOutfit.outfitReferences.filter(a => a.id !== id) }
+                        : null
+                })),
+
             resetSession: () =>
                 set({
                     currentPersona: {
@@ -93,6 +125,11 @@ export const useAppStore = create<AppState>()(
                         id: "default-office",
                         name: "Main Office",
                         officeReferences: [],
+                    },
+                    currentOutfit: {
+                        id: "default-outfit",
+                        name: "Outfit References",
+                        outfitReferences: [],
                     },
                 }),
         }),

@@ -6,7 +6,7 @@ import { useDropzone } from "react-dropzone";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { PhotoAsset } from "@/lib/store";
+import { AssetType, PhotoAsset } from "@/lib/store";
 import { AssetGalleryModal } from "./asset-gallery-modal";
 import { assetService } from "@/lib/assets";
 
@@ -18,7 +18,7 @@ interface PhotoUploaderProps {
     description: string;
     maxFiles?: number;
     userId: string;
-    assetType: "face" | "office";
+    assetType: AssetType;
 }
 
 export function PhotoUploader({

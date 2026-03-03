@@ -46,7 +46,7 @@ function WizardWrapper() {
             <div className="mx-auto max-w-3xl rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">
                 {sessionId ? (
                     <p>
-                        Tryb: <span className="font-semibold text-white">Kontynuacja sesji</span>. Kolejne 4 zdjęcia zostaną dopisane do wybranej sesji.
+                        Tryb: <span className="font-semibold text-white">Kontynuacja sesji</span>. Liczbę nowych zdjęć (1-5) ustawisz w ostatnim kroku.
                     </p>
                 ) : (
                     <p>

@@ -8,6 +8,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { PhotoUploader } from "@/components/photo-uploader";
@@ -24,6 +32,9 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
     const [isSavingReferences, setIsSavingReferences] = useState(false);
     const [faceReferencesDraft, setFaceReferencesDraft] = useState<PhotoAsset[]>([]);
     const [officeReferencesDraft, setOfficeReferencesDraft] = useState<PhotoAsset[]>([]);
+    const [outfitReferencesDraft, setOutfitReferencesDraft] = useState<PhotoAsset[]>([]);
+    const [customPromptDraft, setCustomPromptDraft] = useState("");
+    const [requestedCountDraft, setRequestedCountDraft] = useState(4);
 
     const resetReferenceDraft = useCallback((sessionData: Photosession) => {
         setFaceReferencesDraft(
@@ -32,6 +43,11 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
         setOfficeReferencesDraft(
             sessionData.officeReferences.slice(0, 1).map((reference, index) => referenceUrlToPhotoAsset(reference, index, "office"))
         );
+        setOutfitReferencesDraft(
+            sessionData.outfitReferences.map((reference, index) => referenceUrlToPhotoAsset(reference, index, "outfit"))
+        );
+        setCustomPromptDraft(sessionData.customPrompt);
+        setRequestedCountDraft(sessionData.requestedCount);
     }, []);
 
     useEffect(() => {
@@ -76,12 +92,17 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
 
         const updatedFaceReferences = faceReferencesDraft.map((asset) => asset.url);
         const updatedOfficeReferences = officeReferencesDraft.slice(0, 1).map((asset) => asset.url);
+        const updatedOutfitReferences = outfitReferencesDraft.map((asset) => asset.url);
+        const updatedCustomPrompt = customPromptDraft.trim();
 
         setIsSavingReferences(true);
         try {
             await sessionService.updateSession(session.id, {
                 faceReferences: updatedFaceReferences,
                 officeReferences: updatedOfficeReferences,
+                outfitReferences: updatedOutfitReferences,
+                customPrompt: updatedCustomPrompt,
+                requestedCount: requestedCountDraft,
             });
 
             setSession((prev) => {
@@ -90,6 +111,9 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                     ...prev,
                     faceReferences: updatedFaceReferences,
                     officeReferences: updatedOfficeReferences,
+                    outfitReferences: updatedOutfitReferences,
+                    customPrompt: updatedCustomPrompt,
+                    requestedCount: requestedCountDraft,
                 };
             });
 
@@ -171,7 +195,7 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                     <div className="flex-shrink-0">
                         <Link href={`/generator?sessionId=${session.id}`}>
                             <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-lg shadow-blue-500/20">
-                                Kontynuuj sesję (+4 zdjęcia)
+                                Kontynuuj sesję (+{session.requestedCount} zdjęć)
                             </Button>
                         </Link>
                     </div>
@@ -263,7 +287,7 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
 
                                         <PhotoUploader
                                             title="Zdjęcia Wizerunkowe"
-                                            description="Wymień zdjęcia twarzy/postaći, które mają być użyte przy kolejnych dogenerowaniach."
+                                            description="Wymień zdjęcia twarzy/postaci, które mają być użyte przy kolejnych dogenerowaniach."
                                             assets={faceReferencesDraft}
                                             onUpload={(asset) => setFaceReferencesDraft((prev) => [...prev, asset])}
                                             onRemove={(id) => setFaceReferencesDraft((prev) => prev.filter((asset) => asset.id !== id))}
@@ -284,6 +308,56 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                             userId={user.uid}
                                             assetType="office"
                                         />
+
+                                        <div className="h-px bg-white/10 w-full" />
+
+                                        <PhotoUploader
+                                            title="Referencje Ubioru (opcjonalnie)"
+                                            description="Dodaj ubrania/stylizacje, aby utrzymać spójny dress code przy kontynuacji sesji."
+                                            assets={outfitReferencesDraft}
+                                            onUpload={(asset) => setOutfitReferencesDraft((prev) => [...prev, asset])}
+                                            onRemove={(id) => setOutfitReferencesDraft((prev) => prev.filter((asset) => asset.id !== id))}
+                                            maxFiles={6}
+                                            userId={user.uid}
+                                            assetType="outfit"
+                                        />
+
+                                        <div className="h-px bg-white/10 w-full" />
+
+                                        <div className="space-y-4">
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                                                    Liczba zdjęć w kolejnej kontynuacji
+                                                </label>
+                                                <Select
+                                                    value={String(requestedCountDraft)}
+                                                    onValueChange={(value) => setRequestedCountDraft(Number(value))}
+                                                >
+                                                    <SelectTrigger className="h-11 border-white/10 bg-white/5 text-white">
+                                                        <SelectValue placeholder="Wybierz liczbę zdjęć" />
+                                                    </SelectTrigger>
+                                                    <SelectContent className="border-white/10 bg-[#0f172a] text-white">
+                                                        {["1", "2", "3", "4", "5"].map((value) => (
+                                                            <SelectItem key={value} value={value}>
+                                                                {value} zdjęć
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label htmlFor="session-prompt-draft" className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                                                    Prompt tekstowy (opcjonalnie)
+                                                </label>
+                                                <Textarea
+                                                    id="session-prompt-draft"
+                                                    value={customPromptDraft}
+                                                    onChange={(e) => setCustomPromptDraft(e.target.value)}
+                                                    placeholder="Np. osoba stojąca bokiem, formalna koszula, naturalny newsroom look."
+                                                    className="min-h-[100px] border-white/10 bg-white/5 text-white placeholder:text-zinc-500"
+                                                />
+                                            </div>
+                                        </div>
 
                                         <div className="flex flex-wrap justify-end gap-2">
                                             <Button
@@ -340,6 +414,42 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                             </div>
                                         </div>
 
+                                        <div className="h-px bg-white/10 w-full" />
+
+                                        <div>
+                                            <div className="flex justify-between items-center mb-3">
+                                                <span className="text-sm font-medium text-zinc-300">Referencje Ubioru</span>
+                                                <span className="text-xs bg-white/10 text-zinc-400 px-2 py-0.5 rounded-full">{session.outfitReferences.length}</span>
+                                            </div>
+                                            {session.outfitReferences.length > 0 ? (
+                                                <div className="grid grid-cols-3 gap-2">
+                                                    {session.outfitReferences.map((url, i) => (
+                                                        <div key={i} className="aspect-square rounded-lg overflow-hidden border border-white/10 bg-zinc-900">
+                                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                            <img src={url} className="w-full h-full object-cover" alt="Outfit ref" />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <p className="text-xs text-zinc-500">Brak referencji ubioru. Możesz je dodać w trybie edycji.</p>
+                                            )}
+                                        </div>
+
+                                        <div className="h-px bg-white/10 w-full" />
+
+                                        <div className="space-y-2 rounded-xl border border-white/10 bg-black/20 p-3">
+                                            <div className="text-xs uppercase tracking-wide text-zinc-500">Parametry kolejnej kontynuacji</div>
+                                            <div className="text-sm text-zinc-300">
+                                                Liczba zdjęć: <span className="font-medium text-white">{session.requestedCount}</span>
+                                            </div>
+                                            <div className="text-sm text-zinc-300">
+                                                Prompt:{" "}
+                                                <span className="text-white">
+                                                    {session.customPrompt ? session.customPrompt : "brak (użyty zostanie prompt bazowy)"}
+                                                </span>
+                                            </div>
+                                        </div>
+
                                         {session.officeReferences.length > 1 ? (
                                             <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-100">
                                                 W tej sesji zapisano wiele lokacji biurowych. Przy kolejnych generacjach zalecamy zostawić tylko jedną, żeby uniknąć mieszania tła.
@@ -351,7 +461,7 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                                 variant="outline"
                                                 className="w-full border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white"
                                             >
-                                                Kontynuuj tę sesję z aktualnymi materiałami
+                                                Kontynuuj tę sesję (+{session.requestedCount} zdjęć)
                                             </Button>
                                         </Link>
                                     </>

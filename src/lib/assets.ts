@@ -10,16 +10,16 @@ import {
     Timestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { PhotoAsset } from "./store";
+import { AssetType, PhotoAsset } from "./store";
 
 export interface UserAsset extends PhotoAsset {
     userId: string;
-    type: "face" | "office";
+    type: AssetType;
     createdAt: Timestamp;
 }
 
 export const assetService = {
-    async saveAsset(userId: string, asset: PhotoAsset, type: "face" | "office") {
+    async saveAsset(userId: string, asset: PhotoAsset, type: AssetType) {
         try {
             // Check if asset with this ID already exists for this user
             const q = query(
@@ -46,7 +46,7 @@ export const assetService = {
         }
     },
 
-    async getUserAssets(userId: string, type: "face" | "office"): Promise<UserAsset[]> {
+    async getUserAssets(userId: string, type: AssetType): Promise<UserAsset[]> {
         try {
             const q = query(
                 collection(db, "user_assets"),
