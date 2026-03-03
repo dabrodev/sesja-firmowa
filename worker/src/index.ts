@@ -48,11 +48,11 @@ const CORS_HEADERS = {
 };
 
 const BASE_VARIATIONS = [
-    "Scene: person looking directly at camera, upper body framing, natural moment between tasks. Maintain their EXACT natural facial expression from the reference photos — do not alter it.",
-    "Scene: person working at laptop or reviewing documents at their desk, slightly angled, candid moment of focused work. Maintain their EXACT natural facial expression from the reference photos.",
-    "Scene: person in mid-conversation or presenting — gesturing naturally or leaning forward, engaged posture, 3/4 body framing. Maintain their EXACT natural facial expression from the reference photos.",
-    "Scene: person standing near a window or by their workspace, looking thoughtfully to the side, candid documentary-style framing. Maintain their EXACT natural facial expression from the reference photos.",
-    "Scene: person walking through the office corridor with confident posture, documentary-style motion freeze, business editorial framing. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: person looking directly at camera in their office, standing naturally. Use full-body framing from head to shoes so wardrobe and shoes are clearly visible. Maintain their EXACT natural facial expression from the reference photos — do not alter it.",
+    "Scene: person working at laptop or reviewing documents at their desk, slightly angled. Use wide composition that includes full outfit and visible shoes under/near the desk whenever physically possible. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: person in mid-conversation or presenting — gesturing naturally or leaning forward, engaged posture. Use at least 7/8 body framing (prefer full body) so clothing and shoes are visible. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: person standing near a window or by their workspace, looking thoughtfully to the side, candid documentary-style framing. Use full-body framing from head to shoes. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: person walking through the office corridor with confident posture, documentary-style motion freeze, business editorial framing. Keep the entire silhouette in frame and show shoes clearly. Maintain their EXACT natural facial expression from the reference photos.",
 ];
 
 function normalizeRequestedCount(value: number | undefined): number {
@@ -483,10 +483,11 @@ Generate a photorealistic business photo session prompt that instructs the AI to
 1. Preserve EXACTLY: the person's face structure, skin tone, hair color/style, and any visible clothing/outfit from the reference photos
 2. CRITICAL: Preserve the person's NATURAL facial expression from the reference photos — do NOT add a smile or change their expression
 3. Place the person in the EXACT office environment shown in the office reference photos (same walls, furniture, lighting setup, color palette)
-4. Photography style: natural window light blended with soft studio fill, 85mm lens, f/2.0 bokeh, full or 3/4 body framing
+4. Photography style: natural window light blended with soft studio fill, 85mm lens, f/2.0 bokeh, full-body framing (head to shoes) whenever possible
 5. If outfit references are provided, match their style, cut, texture, and color palette as closely as possible
-6. Result: a polished, high-end corporate business photo suitable for LinkedIn, press materials, and company websites
-${customPromptText ? `7. Additional user direction to include when it does not conflict with identity consistency: ${customPromptText}` : ""}
+6. Ensure the full outfit is visible, including footwear (unless physically impossible due pose/scene constraints)
+7. Result: a polished, high-end corporate business photo suitable for LinkedIn, press materials, and company websites
+${customPromptText ? `8. Additional user direction to include when it does not conflict with identity consistency: ${customPromptText}` : ""}
 
 Generate ONLY the image prompt text. 2-3 sentences maximum.`;
 
@@ -521,7 +522,7 @@ function getDefaultPrompt(customPrompt: string): string {
         ? `Respect this additional creative direction from the user: ${trimmedCustomPrompt}.`
         : "";
 
-    return `Photorealistic professional business photo session. Preserve the person's exact face, skin tone, hair, clothing, and NATURAL EXPRESSION from the reference photos — do not alter their expression. Place them in the exact office environment shown in the workspace reference photos. Natural window light with soft studio fill, 85mm f/2.0, warm professional color grading. ${customLine}`.trim();
+    return `Photorealistic professional business photo session. Preserve the person's exact face, skin tone, hair, clothing, and NATURAL EXPRESSION from the reference photos — do not alter their expression. Place them in the exact office environment shown in the workspace reference photos. Use full-body composition from head to shoes so outfit and footwear are visible whenever possible. Natural window light with soft studio fill, 85mm f/2.0, warm professional color grading. ${customLine}`.trim();
 }
 
 // ─── Generate one image with Gemini ──────────────────────────────────────────
@@ -539,7 +540,7 @@ async function generateOneImage(
     const parts: GeminiPart[] = [];
 
     parts.push({
-        text: `FACE REFERENCE PHOTOS (${faceImages.length} images):\nThese show the EXACT person to photograph. You MUST:\n- Preserve their face structure, skin tone, eye color, nose shape, jawline 100% accurately\n- Keep their hair color, length, and style EXACTLY as shown\n- Reproduce their clothing/outfit/style precisely — same colors, fabric, neckline`,
+        text: `FACE REFERENCE PHOTOS (${faceImages.length} images):\nThese show the EXACT person to photograph. You MUST:\n- Preserve their face structure, skin tone, eye color, nose shape, jawline 100% accurately\n- Keep their hair color, length, and style EXACTLY as shown\n- Reproduce their clothing/outfit/style precisely — same colors, fabric, neckline\n- Frame the shot to show as much of the full outfit as possible, including shoes when feasible`,
     });
     for (const img of faceImages) {
         parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
@@ -562,7 +563,7 @@ async function generateOneImage(
     }
 
     parts.push({
-        text: `PHOTO SESSION STYLE: ${prompt}\n\nVARIATION INSTRUCTIONS: ${variation}\n\nIMPORTANT: Do NOT invent or change the person's facial expression. Reproduce it exactly as it appears in the reference photos. If they look neutral, keep it neutral. If they are slightly smiling, keep that. This should look like a REAL professional business photo session — not a passport photo, not an illustration.`,
+        text: `PHOTO SESSION STYLE: ${prompt}\n\nVARIATION INSTRUCTIONS: ${variation}\n\nIMPORTANT: Do NOT invent or change the person's facial expression. Reproduce it exactly as it appears in the reference photos. If they look neutral, keep it neutral. If they are slightly smiling, keep that. Prioritize wider framing so the outfit is visible from head to shoes (or at least below knees if full body is impossible). This should look like a REAL professional business photo session — not a passport photo, not an illustration.`,
     });
 
     console.log(`[Gemini] Calling API for variation: ${variation}`);
