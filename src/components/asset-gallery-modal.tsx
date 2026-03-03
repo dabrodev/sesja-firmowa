@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle2, Search, Trash2, Shield } from "lucide-react";
-import { assetService } from "@/lib/assets";
+import { assetService, UserAsset } from "@/lib/assets";
 import { AssetType, PhotoAsset } from "@/lib/store";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -28,7 +28,7 @@ export function AssetGalleryModal({
     maxSelectable = 5,
     currentSelected = []
 }: AssetGalleryModalProps) {
-    const [assets, setAssets] = useState<(PhotoAsset & { docId: string })[]>([]);
+    const [assets, setAssets] = useState<UserAsset[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(
         new Set(currentSelected.map(a => a.id))
@@ -40,8 +40,7 @@ export function AssetGalleryModal({
         setIsLoading(true);
         try {
             const data = await assetService.getUserAssets(userId, type);
-            // Ensure data has docId typing according to our state declaration
-            setAssets(data as unknown as (PhotoAsset & { docId: string })[]);
+            setAssets(data);
         } catch (error) {
             console.error("Failed to load assets:", error);
         } finally {

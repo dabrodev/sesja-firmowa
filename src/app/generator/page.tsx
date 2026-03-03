@@ -160,6 +160,9 @@ export default function App() {
                                     <DropdownMenuItem className="focus:bg-white/5 focus:text-white cursor-pointer" asChild>
                                         <Link href="/sesje">moje sesje</Link>
                                     </DropdownMenuItem>
+                                    <DropdownMenuItem className="focus:bg-white/5 focus:text-white cursor-pointer" asChild>
+                                        <Link href="/materialy">moje materiały</Link>
+                                    </DropdownMenuItem>
                                     <DropdownMenuItem className="focus:bg-white/5 focus:text-white cursor-pointer">
                                         ustawienia
                                     </DropdownMenuItem>
@@ -184,6 +187,11 @@ export default function App() {
                         <Link href="/sesje">
                             <Button variant="outline" className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white hidden sm:flex">
                                 moje sesje
+                            </Button>
+                        </Link>
+                        <Link href="/materialy">
+                            <Button variant="outline" className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white hidden sm:flex">
+                                materiały
                             </Button>
                         </Link>
                         <Link href="/">

@@ -123,6 +123,9 @@ export default function Home() {
                     <Link href="/sesje">moje sesje</Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem className="focus:bg-white/5 focus:text-white cursor-pointer" asChild>
+                    <Link href="/materialy">moje materiały</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="focus:bg-white/5 focus:text-white cursor-pointer" asChild>
                     <Link href="/wolny-generator">generator pojedynczego zdjęcia</Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem className="focus:bg-white/5 focus:text-white cursor-pointer">
@@ -147,11 +150,18 @@ export default function Home() {
               </Button>
             )}
             {user && (
-              <Link href="/sesje">
-                <Button variant="ghost" className="text-white/70 hover:bg-white/5 hover:text-white px-2 sm:px-4 text-xs sm:text-sm">
-                  moje sesje
-                </Button>
-              </Link>
+              <div className="hidden sm:flex items-center gap-1">
+                <Link href="/sesje">
+                  <Button variant="ghost" className="text-white/70 hover:bg-white/5 hover:text-white px-2 sm:px-4 text-xs sm:text-sm">
+                    moje sesje
+                  </Button>
+                </Link>
+                <Link href="/materialy">
+                  <Button variant="ghost" className="text-white/70 hover:bg-white/5 hover:text-white px-2 sm:px-4 text-xs sm:text-sm">
+                    materiały
+                  </Button>
+                </Link>
+              </div>
             )}
             <Link href="/generator">
               <Button className="bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-500/25 px-3 sm:px-6 h-8 sm:h-10 text-xs sm:text-sm">

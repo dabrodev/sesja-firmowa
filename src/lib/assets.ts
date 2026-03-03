@@ -14,6 +14,7 @@ import { AssetType, PhotoAsset } from "./store";
 import { extractR2KeyFromReference } from "./reference-assets";
 
 export interface UserAsset extends PhotoAsset {
+    docId: string;
     userId: string;
     type: AssetType;
     createdAt: Timestamp;
@@ -56,10 +57,19 @@ export const assetService = {
             );
             // using local sort to avoid requiring a composite index right away
             const querySnapshot = await getDocs(q);
-            const assets = querySnapshot.docs.map(doc => ({
-                docId: doc.id,
-                ...doc.data()
-            })) as (UserAsset & { docId: string })[];
+            const assets = querySnapshot.docs.map((doc) => {
+                const data = doc.data();
+                return {
+                    docId: doc.id,
+                    id: typeof data.id === "string" ? data.id : doc.id,
+                    url: typeof data.url === "string" ? data.url : "",
+                    name: typeof data.name === "string" ? data.name : "asset",
+                    size: typeof data.size === "number" ? data.size : 0,
+                    userId: typeof data.userId === "string" ? data.userId : userId,
+                    type: data.type === "face" || data.type === "office" || data.type === "outfit" ? data.type : type,
+                    createdAt: data.createdAt instanceof Timestamp ? data.createdAt : Timestamp.fromMillis(0),
+                } as UserAsset;
+            });
 
             return assets.sort((a, b) => {
                 const timeA = a.createdAt?.toMillis() || 0;
@@ -70,6 +80,20 @@ export const assetService = {
             console.error("Error getting user assets:", error);
             throw error;
         }
+    },
+
+    async getAllUserAssets(userId: string): Promise<UserAsset[]> {
+        const [faceAssets, officeAssets, outfitAssets] = await Promise.all([
+            this.getUserAssets(userId, "face"),
+            this.getUserAssets(userId, "office"),
+            this.getUserAssets(userId, "outfit"),
+        ]);
+
+        return [...faceAssets, ...officeAssets, ...outfitAssets].sort((a, b) => {
+            const timeA = a.createdAt?.toMillis() || 0;
+            const timeB = b.createdAt?.toMillis() || 0;
+            return timeB - timeA;
+        });
     },
 
     async deleteAsset(docId: string, assetReference?: string) {

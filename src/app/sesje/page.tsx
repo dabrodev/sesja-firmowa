@@ -92,6 +92,11 @@ export default function SessionsPage() {
                                 <Sparkles className="mr-2 h-4 w-4" /> Generator pojedynczego zdjęcia
                             </Button>
                         </Link>
+                        <Link href="/materialy">
+                            <Button variant="outline" className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white hidden sm:flex">
+                                moje materiały
+                            </Button>
+                        </Link>
                         <Link href="/generator">
                             <Button variant="outline" className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white">
                                 Nowa sesja
@@ -109,6 +114,11 @@ export default function SessionsPage() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-3">
+                        <Link href="/materialy">
+                            <Button variant="outline" className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white">
+                                Moje materiały
+                            </Button>
+                        </Link>
                         <Link href="/wolny-generator">
                             <Button variant="outline" className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white">
                                 <Sparkles className="mr-2 h-4 w-4" /> Pojedyncze zdjęcie
