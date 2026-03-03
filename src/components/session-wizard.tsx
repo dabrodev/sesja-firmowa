@@ -504,7 +504,7 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                         setIsGenerating(false);
                                                     }
                                                 }}
-                                                className="h-16 w-64 bg-gradient-to-br from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 text-xl font-bold shadow-2xl shadow-blue-500/30 transition-all hover:scale-105 active:scale-95 rounded-2xl text-white border border-white/10"
+                                                className="min-h-16 h-auto w-full max-w-sm px-6 py-4 bg-gradient-to-br from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 text-base sm:text-lg font-bold shadow-2xl shadow-blue-500/30 transition-all hover:scale-105 active:scale-95 rounded-2xl text-white border border-white/10 whitespace-normal text-center leading-tight"
                                             >
                                                 {isGenerating ? (
                                                     <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/20 border-t-white mr-2" />
