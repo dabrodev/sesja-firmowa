@@ -11,6 +11,7 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { AssetType, PhotoAsset } from "./store";
+import { extractR2KeyFromReference } from "./reference-assets";
 
 export interface UserAsset extends PhotoAsset {
     userId: string;
@@ -71,8 +72,30 @@ export const assetService = {
         }
     },
 
-    async deleteAsset(docId: string) {
+    async deleteAsset(docId: string, assetReference?: string) {
         try {
+            const key = assetReference ? extractR2KeyFromReference(assetReference) : null;
+
+            // Remove the physical file from R2 first (gallery assets live under uploads/*).
+            if (key && key.startsWith("uploads/")) {
+                const response = await fetch("/api/delete-file", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ key }),
+                });
+
+                if (!response.ok) {
+                    let errorMessage = "Nie udało się usunąć pliku z chmury.";
+                    try {
+                        const data = await response.json() as { error?: string };
+                        if (data.error) errorMessage = data.error;
+                    } catch {
+                        // ignore JSON parse failures
+                    }
+                    throw new Error(errorMessage);
+                }
+            }
+
             await deleteDoc(doc(db, "user_assets", docId));
         } catch (error) {
             console.error("Error deleting user asset:", error);

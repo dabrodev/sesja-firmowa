@@ -74,19 +74,18 @@ export function AssetGalleryModal({
         onClose();
     };
 
-    const handleDelete = async (docId: string, e: React.MouseEvent) => {
+    const handleDelete = async (asset: PhotoAsset & { docId: string }, e: React.MouseEvent) => {
         e.stopPropagation();
-        if (!confirm("Czy na pewno chcesz usunąć to zdjęcie ze swojej galerii?")) return;
+        if (!confirm("Czy na pewno chcesz usunąć to zdjęcie? Zostanie usunięte z galerii oraz z chmury R2.")) return;
 
         try {
-            await assetService.deleteAsset(docId);
-            setAssets(assets.filter(a => a.docId !== docId));
+            await assetService.deleteAsset(asset.docId, asset.url);
+            setAssets((prev) => prev.filter((item) => item.docId !== asset.docId));
 
             // Also remove from selection if it was selected
-            const deletedAsset = assets.find(a => a.docId === docId);
-            if (deletedAsset && selectedIds.has(deletedAsset.id)) {
+            if (selectedIds.has(asset.id)) {
                 const newSelected = new Set(selectedIds);
-                newSelected.delete(deletedAsset.id);
+                newSelected.delete(asset.id);
                 setSelectedIds(newSelected);
             }
         } catch (error) {
@@ -180,7 +179,7 @@ export function AssetGalleryModal({
 
                                                 {/* Delete Button */}
                                                 <button
-                                                    onClick={(e) => handleDelete(asset.docId, e)}
+                                                    onClick={(e) => handleDelete(asset, e)}
                                                     className={cn(
                                                         "absolute top-2 right-2 rounded-full bg-red-500/80 p-2 text-white transition-opacity hover:bg-red-500 shadow-lg backdrop-blur-md",
                                                         isSelected ? "opacity-0" : "opacity-0 group-hover:opacity-100" // Hide when selected

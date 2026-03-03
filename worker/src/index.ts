@@ -166,6 +166,14 @@ const workerHandler = {
             return handleUpload(request, env);
         }
 
+        // Delete files from R2 binding
+        if (url.pathname === "/delete") {
+            if (request.method !== "POST") {
+                return new Response("Method not allowed", { status: 405, headers: CORS_HEADERS });
+            }
+            return handleDeleteFile(request, env);
+        }
+
         // Serve files from R2 binding
         if (url.pathname === "/file") {
             const key = url.searchParams.get("key");
@@ -397,6 +405,36 @@ async function handleUpload(request: Request, env: Env): Promise<Response> {
         });
     } catch (error: unknown) {
         return new Response(JSON.stringify({ error: getErrorMessage(error, "Upload failed") }), {
+            status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        });
+    }
+}
+
+async function handleDeleteFile(request: Request, env: Env): Promise<Response> {
+    try {
+        const body = await request.json() as { key?: string };
+        const key = typeof body.key === "string" ? body.key.trim() : "";
+
+        if (!key) {
+            return new Response(JSON.stringify({ error: "Missing key" }), {
+                status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+            });
+        }
+
+        // Only allow deleting uploaded user assets.
+        if (!key.startsWith("uploads/")) {
+            return new Response(JSON.stringify({ error: "Invalid key prefix" }), {
+                status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+            });
+        }
+
+        await env.MEDIA_BUCKET.delete(key);
+
+        return new Response(JSON.stringify({ success: true, key }), {
+            status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        });
+    } catch (error: unknown) {
+        return new Response(JSON.stringify({ error: getErrorMessage(error, "Delete failed") }), {
             status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
         });
     }
