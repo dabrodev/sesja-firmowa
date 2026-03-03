@@ -10,6 +10,7 @@ import {
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { userService, UserProfile } from "@/lib/users";
+import { useAppStore } from "@/lib/store";
 
 interface AuthContextType {
     user: User | null;
@@ -49,6 +50,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         let unsubscribeProfile: (() => void) | undefined;
 
         const unsubscribeAuth = onAuthStateChanged(auth, async (authUser) => {
+            const appState = useAppStore.getState();
+            const hasDraftAssets =
+                (appState.currentPersona?.faceReferences.length ?? 0) > 0 ||
+                (appState.currentOffice?.officeReferences.length ?? 0) > 0 ||
+                (appState.currentOutfit?.outfitReferences.length ?? 0) > 0;
+
+            // Protect against cross-account draft leakage on the same browser.
+            if (authUser) {
+                if (appState.draftOwnerUid !== authUser.uid && hasDraftAssets) {
+                    appState.resetSession();
+                }
+                appState.setDraftOwnerUid(authUser.uid);
+            } else {
+                if (hasDraftAssets) {
+                    appState.resetSession();
+                }
+                appState.setDraftOwnerUid(null);
+            }
+
             // Decouple user state from profile loading to prevent UI hang
             setUser(authUser);
             setLoading(false); // Stop pulsing as soon as we know if user is logged in or not
@@ -108,6 +128,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     const logout = async () => {
         try {
+            const appState = useAppStore.getState();
+            appState.resetSession();
+            appState.setDraftOwnerUid(null);
             await firebaseSignOut(auth);
             localStorage.removeItem("user_profile_cache");
             setUserProfile(null);

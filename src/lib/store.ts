@@ -30,12 +30,14 @@ export interface Outfit {
 }
 
 interface AppState {
+    draftOwnerUid: string | null;
     currentPersona: Persona | null;
     currentOffice: Office | null;
     currentOutfit: Outfit | null;
     sessions: Photosession[]; // Placeholder for session history
 
     // Actions
+    setDraftOwnerUid: (uid: string | null) => void;
     setPersona: (persona: Persona | null) => void;
     setOffice: (office: Office | null) => void;
     setOutfit: (outfit: Outfit | null) => void;
@@ -51,6 +53,7 @@ interface AppState {
 export const useAppStore = create<AppState>()(
     persist(
         (set) => ({
+            draftOwnerUid: null,
             currentPersona: {
                 id: "default-persona",
                 name: "My Profile",
@@ -68,6 +71,7 @@ export const useAppStore = create<AppState>()(
             },
             sessions: [],
 
+            setDraftOwnerUid: (uid) => set({ draftOwnerUid: uid }),
             setPersona: (persona) => set({ currentPersona: persona }),
             setOffice: (office) => set({ currentOffice: office }),
             setOutfit: (outfit) => set({ currentOutfit: outfit }),
