@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { AssetType, PhotoAsset } from "@/lib/store";
 import { AssetGalleryModal } from "./asset-gallery-modal";
 import { assetService } from "@/lib/assets";
+import { ImageWithPlaceholder } from "./image-with-placeholder";
 
 interface PhotoUploaderProps {
     onUpload: (asset: PhotoAsset) => void;
@@ -166,11 +167,11 @@ export function PhotoUploader({
                             exit={{ opacity: 0, scale: 0.8 }}
                             className="group relative aspect-square overflow-hidden rounded-xl border border-white/10 bg-zinc-900"
                         >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
+                            <ImageWithPlaceholder
                                 src={asset.url}
                                 alt={asset.name}
                                 className="h-full w-full object-cover transition-transform group-hover:scale-110"
+                                fallbackLabel="Zdjęcie usunięte"
                             />
                             <div className="absolute inset-0 bg-black/40 opacity-0 transition-opacity group-hover:opacity-100" />
                             <button

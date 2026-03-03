@@ -8,6 +8,7 @@ import { Camera, Coins, Loader2, Sparkles, Trash2, Images, CheckSquare, Square }
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { ImageWithPlaceholder } from "@/components/image-with-placeholder";
 
 type AssetFilter = "all" | AssetType;
 
@@ -281,11 +282,11 @@ export default function MaterialsPage() {
                                     </button>
 
                                     <a href={asset.url} target="_blank" rel="noopener noreferrer">
-                                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                                        <img
+                                        <ImageWithPlaceholder
                                             src={asset.url}
                                             alt={asset.name}
                                             className="aspect-square w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                            fallbackLabel="Zdjęcie usunięte"
                                         />
                                     </a>
 
@@ -309,4 +310,3 @@ export default function MaterialsPage() {
         </div>
     );
 }
-

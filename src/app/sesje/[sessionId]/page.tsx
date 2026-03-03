@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { PhotoUploader } from "@/components/photo-uploader";
 import type { PhotoAsset } from "@/lib/store";
 import { referenceUrlToPhotoAsset } from "@/lib/reference-assets";
+import { ImageWithPlaceholder } from "@/components/image-with-placeholder";
 
 export default function SessionDetailsPage({ params }: { params: Promise<{ sessionId: string }> }) {
     const { sessionId } = use(params);
@@ -227,11 +228,11 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                         transition={{ delay: i * 0.1 }}
                                         className="group relative rounded-2xl overflow-hidden border border-white/10 bg-zinc-900 aspect-[3/4]"
                                     >
-                                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                                        <img
+                                        <ImageWithPlaceholder
                                             src={url}
                                             alt={`Generated shot ${i + 1}`}
                                             className="w-full h-full object-cover"
+                                            fallbackLabel="Zdjęcie niedostępne"
                                         />
 
                                         {/* Overlay Actions */}
@@ -390,8 +391,12 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                             <div className="grid grid-cols-3 gap-2">
                                                 {session.faceReferences.map((url, i) => (
                                                     <div key={i} className="aspect-square rounded-lg overflow-hidden border border-white/10 bg-zinc-900">
-                                                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                                                        <img src={url} className="w-full h-full object-cover" alt="Face ref" />
+                                                        <ImageWithPlaceholder
+                                                            src={url}
+                                                            className="w-full h-full object-cover"
+                                                            alt="Face ref"
+                                                            fallbackLabel="Zdjęcie usunięte"
+                                                        />
                                                     </div>
                                                 ))}
                                             </div>
@@ -407,8 +412,12 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                             <div className="grid grid-cols-2 gap-2">
                                                 {session.officeReferences.map((url, i) => (
                                                     <div key={i} className="aspect-video rounded-lg overflow-hidden border border-white/10 bg-zinc-900">
-                                                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                                                        <img src={url} className="w-full h-full object-cover" alt="Office ref" />
+                                                        <ImageWithPlaceholder
+                                                            src={url}
+                                                            className="w-full h-full object-cover"
+                                                            alt="Office ref"
+                                                            fallbackLabel="Zdjęcie usunięte"
+                                                        />
                                                     </div>
                                                 ))}
                                             </div>
@@ -425,8 +434,12 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                                 <div className="grid grid-cols-3 gap-2">
                                                     {session.outfitReferences.map((url, i) => (
                                                         <div key={i} className="aspect-square rounded-lg overflow-hidden border border-white/10 bg-zinc-900">
-                                                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                                                            <img src={url} className="w-full h-full object-cover" alt="Outfit ref" />
+                                                            <ImageWithPlaceholder
+                                                                src={url}
+                                                                className="w-full h-full object-cover"
+                                                                alt="Outfit ref"
+                                                                fallbackLabel="Zdjęcie usunięte"
+                                                            />
                                                         </div>
                                                     ))}
                                                 </div>

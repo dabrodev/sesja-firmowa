@@ -8,6 +8,7 @@ import { assetService, UserAsset } from "@/lib/assets";
 import { AssetType, PhotoAsset } from "@/lib/store";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { ImageWithPlaceholder } from "./image-with-placeholder";
 
 interface AssetGalleryModalProps {
     isOpen: boolean;
@@ -162,14 +163,14 @@ export function AssetGalleryModal({
                                                     disabled && "opacity-40 cursor-not-allowed grayscale-[50%]"
                                                 )}
                                             >
-                                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                                <img
+                                                <ImageWithPlaceholder
                                                     src={asset.url}
                                                     alt={asset.name}
                                                     className={cn(
                                                         "h-full w-full object-cover transition-transform duration-500",
                                                         isSelected ? "scale-105" : "group-hover:scale-110"
                                                     )}
+                                                    fallbackLabel="Zdjęcie usunięte"
                                                 />
                                                 <div className={cn(
                                                     "absolute inset-0 transition-opacity duration-300",
