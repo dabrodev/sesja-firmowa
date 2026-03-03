@@ -47,7 +47,15 @@ const CORS_HEADERS = {
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
-const BASE_VARIATIONS = [
+const DEFAULT_VARIATIONS = [
+    "Scene: person looking directly at camera, upper body framing, natural moment between tasks. Maintain their EXACT natural facial expression from the reference photos — do not alter it.",
+    "Scene: person working at laptop or reviewing documents at their desk, slightly angled, candid moment of focused work. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: person in mid-conversation or presenting — gesturing naturally or leaning forward, engaged posture, 3/4 body framing. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: person standing near a window or by their workspace, looking thoughtfully to the side, candid documentary-style framing. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: person walking through the office corridor with confident posture, documentary-style motion freeze, business editorial framing. Maintain their EXACT natural facial expression from the reference photos.",
+];
+
+const OUTFIT_PRIORITY_VARIATIONS = [
     "Scene: person looking directly at camera in their office, standing naturally. Use full-body framing from head to shoes so wardrobe and shoes are clearly visible. Maintain their EXACT natural facial expression from the reference photos — do not alter it.",
     "Scene: person working at laptop or reviewing documents at their desk, slightly angled. Use wide composition that includes full outfit and visible shoes under/near the desk whenever physically possible. Maintain their EXACT natural facial expression from the reference photos.",
     "Scene: person in mid-conversation or presenting — gesturing naturally or leaning forward, engaged posture. Use at least 7/8 body framing (prefer full body) so clothing and shoes are visible. Maintain their EXACT natural facial expression from the reference photos.",
@@ -58,6 +66,39 @@ const BASE_VARIATIONS = [
 function normalizeRequestedCount(value: number | undefined): number {
     if (typeof value !== "number" || !Number.isFinite(value)) return 4;
     return Math.min(5, Math.max(1, Math.round(value)));
+}
+
+function shouldPrioritizeOutfit(customPrompt: string, outfitCount: number): boolean {
+    const normalized = customPrompt.toLowerCase();
+    const closeFramingRequested = [
+        "close-up",
+        "close up",
+        "headshot",
+        "portrait",
+        "portret",
+        "zbliżenie",
+        "zblizenie",
+        "do pasa",
+        "bust shot",
+        "tight frame",
+    ].some((keyword) => normalized.includes(keyword));
+
+    if (closeFramingRequested) {
+        return false;
+    }
+
+    return [
+        "ubiór",
+        "ubran",
+        "styliz",
+        "but",
+        "shoes",
+        "outfit",
+        "full body",
+        "pelna sylwetka",
+        "cała postać",
+        "cala postac",
+    ].some((keyword) => normalized.includes(keyword)) || outfitCount > 0;
 }
 
 // ─── Cloudflare Workflow ──────────────────────────────────────────────────────
@@ -75,6 +116,7 @@ export class GenerationWorkflow extends WorkflowEntrypoint<Env, GenerateParams> 
         } = event.payload;
         const safeRequestedCount = normalizeRequestedCount(requestedCount);
         const safeRunId = runId?.trim() || Date.now().toString();
+        const prioritizeOutfit = shouldPrioritizeOutfit(customPrompt, outfitKeys.length);
 
         // Step 1: Generate a tailored prompt using Azure OpenAI
         const prompt = await step.do("generate-prompt", {
@@ -85,7 +127,8 @@ export class GenerationWorkflow extends WorkflowEntrypoint<Env, GenerateParams> 
                 faceKeys.length,
                 officeKeys.length,
                 outfitKeys.length,
-                customPrompt
+                customPrompt,
+                prioritizeOutfit
             );
         });
 
@@ -93,7 +136,10 @@ export class GenerationWorkflow extends WorkflowEntrypoint<Env, GenerateParams> 
         const resultKeys: string[] = [];
 
         // Generate requested number of variations (1-5)
-        const variations = BASE_VARIATIONS.slice(0, safeRequestedCount);
+        const variationPool = prioritizeOutfit
+            ? OUTFIT_PRIORITY_VARIATIONS
+            : DEFAULT_VARIATIONS;
+        const variations = variationPool.slice(0, safeRequestedCount);
 
         for (let i = 0; i < variations.length; i++) {
             const variation = variations[i];
@@ -113,10 +159,12 @@ export class GenerationWorkflow extends WorkflowEntrypoint<Env, GenerateParams> 
                 const base64Image = await generateOneImage(
                     this.env,
                     prompt,
+                    customPrompt,
                     variation,
                     faceImages,
                     officeImages,
-                    outfitImages
+                    outfitImages,
+                    prioritizeOutfit
                 );
 
                 // Save immediately to R2 — return only the key (small string)
@@ -219,6 +267,7 @@ const workerHandler = {
                     typeof runId === "string" && runId.trim().length > 0
                         ? runId.trim()
                         : Date.now().toString();
+                const workflowInstanceId = `${sessionId}-${normalizedRunId}`;
 
                 if (
                     !sessionId ||
@@ -236,7 +285,7 @@ const workerHandler = {
 
                 // Create workflow instance — runs in background
                 const instance = await env.GENERATION_WORKFLOW.create({
-                    id: sessionId,
+                    id: workflowInstanceId,
                     params: {
                         sessionId,
                         uid,
@@ -341,6 +390,7 @@ const workerHandler = {
         if (url.pathname === "/status") {
             const instanceId = url.searchParams.get("instanceId");
             const runId = url.searchParams.get("runId");
+            const sessionId = url.searchParams.get("sessionId");
             if (!instanceId) {
                 return new Response(JSON.stringify({ error: "Missing instanceId" }), {
                     status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
@@ -354,7 +404,8 @@ const workerHandler = {
 
                 let discoveredUrls: string[] = [];
                 if (status.status !== "complete" || workflowResultUrls.length === 0) {
-                    const prefix = runId ? `results/${instanceId}/${runId}/` : `results/${instanceId}/`;
+                    const baseId = sessionId || instanceId;
+                    const prefix = runId ? `results/${baseId}/${runId}/` : `results/${baseId}/`;
                     const list = await env.MEDIA_BUCKET.list({ prefix });
                     discoveredUrls = list.objects
                         .sort((a, b) => a.key.localeCompare(b.key))
@@ -471,7 +522,8 @@ async function generatePromptWithAzure(
     faceCount: number,
     officeCount: number,
     outfitCount: number,
-    customPrompt: string
+    customPrompt: string,
+    prioritizeOutfit: boolean
 ): Promise<string> {
     const systemPrompt = `You are a professional photography prompt engineer specializing in corporate business photo sessions.
 Create a prompt for a high-end business photo session — NOT a passport or ID headshot.`;
@@ -479,17 +531,20 @@ Create a prompt for a high-end business photo session — NOT a passport or ID h
     const customPromptText = customPrompt.trim();
     const userMessage = `I have ${faceCount} face reference photo(s), ${officeCount} office/workspace reference photo(s), and ${outfitCount} outfit reference photo(s).
 
-Generate a photorealistic business photo session prompt that instructs the AI to:
-1. Preserve EXACTLY: the person's face structure, skin tone, hair color/style, and any visible clothing/outfit from the reference photos
-2. CRITICAL: Preserve the person's NATURAL facial expression from the reference photos — do NOT add a smile or change their expression
-3. Place the person in the EXACT office environment shown in the office reference photos (same walls, furniture, lighting setup, color palette)
-4. Photography style: natural window light blended with soft studio fill, 85mm lens, f/2.0 bokeh, full-body framing (head to shoes) whenever possible
-5. If outfit references are provided, match their style, cut, texture, and color palette as closely as possible
-6. Ensure the full outfit is visible, including footwear (unless physically impossible due pose/scene constraints)
-7. Result: a polished, high-end corporate business photo suitable for LinkedIn, press materials, and company websites
-${customPromptText ? `8. Additional user direction to include when it does not conflict with identity consistency: ${customPromptText}` : ""}
+Generate a photorealistic corporate photo prompt (2-3 sentences) with these requirements:
+- Preserve EXACT identity: face structure, skin tone, hair, and natural expression from references
+- Keep the exact office/workspace environment from office references
+- Use realistic premium business photography style: natural window light + soft studio fill, 85mm lens, f/2.0
+- The result must be suitable for LinkedIn, press materials, and company websites
+${prioritizeOutfit
+        ? "- Prioritize outfit visibility with wider framing (head-to-shoes when physically possible)"
+        : "- Keep framing natural to the scene; do NOT force full-body framing when it is not requested"}
+${customPromptText
+        ? `- USER PRIORITY (highest priority creative direction): ${customPromptText}
+- If USER PRIORITY specifies pose/framing/styling, follow it unless it conflicts with identity or office consistency`
+        : "- No additional user prompt was provided: choose a natural, professional composition"}
 
-Generate ONLY the image prompt text. 2-3 sentences maximum.`;
+Return ONLY the final image prompt text.`;
 
     const resp = await fetch(
         `${env.AZURE_OPENAI_ENDPOINT}openai/deployments/${env.AZURE_OPENAI_DEPLOYMENT_NAME}/chat/completions?api-version=${env.AZURE_OPENAI_API_VERSION}`,
@@ -509,20 +564,23 @@ Generate ONLY the image prompt text. 2-3 sentences maximum.`;
 
     if (!resp.ok) {
         console.error("Azure OpenAI error:", await resp.text());
-        return getDefaultPrompt(customPromptText);
+        return getDefaultPrompt(customPromptText, prioritizeOutfit);
     }
 
     const data = await resp.json() as AzureChatCompletionResponse;
-    return data.choices?.[0]?.message?.content || getDefaultPrompt(customPromptText);
+    return data.choices?.[0]?.message?.content || getDefaultPrompt(customPromptText, prioritizeOutfit);
 }
 
-function getDefaultPrompt(customPrompt: string): string {
+function getDefaultPrompt(customPrompt: string, prioritizeOutfit: boolean): string {
     const trimmedCustomPrompt = customPrompt.trim();
+    const framingLine = prioritizeOutfit
+        ? "Prioritize wider composition so outfit and shoes are visible whenever physically possible."
+        : "Keep composition natural to the scene and avoid forcing full-body framing unless explicitly requested.";
     const customLine = trimmedCustomPrompt
-        ? `Respect this additional creative direction from the user: ${trimmedCustomPrompt}.`
-        : "";
+        ? `Primary user direction (highest priority): ${trimmedCustomPrompt}.`
+        : "No extra user direction was provided; choose a clean, natural business composition.";
 
-    return `Photorealistic professional business photo session. Preserve the person's exact face, skin tone, hair, clothing, and NATURAL EXPRESSION from the reference photos — do not alter their expression. Place them in the exact office environment shown in the workspace reference photos. Use full-body composition from head to shoes so outfit and footwear are visible whenever possible. Natural window light with soft studio fill, 85mm f/2.0, warm professional color grading. ${customLine}`.trim();
+    return `Photorealistic professional business photo session. Preserve the person's exact face, skin tone, hair, clothing, and natural expression from the reference photos. Place them in the exact office environment shown in workspace references. ${framingLine} Natural window light with soft studio fill, 85mm f/2.0, warm professional color grading. ${customLine}`.trim();
 }
 
 // ─── Generate one image with Gemini ──────────────────────────────────────────
@@ -530,17 +588,23 @@ function getDefaultPrompt(customPrompt: string): string {
 async function generateOneImage(
     env: Env,
     prompt: string,
+    customPrompt: string,
     variation: string,
     faceImages: { base64: string; mimeType: string }[],
     officeImages: { base64: string; mimeType: string }[],
-    outfitImages: { base64: string; mimeType: string }[]
+    outfitImages: { base64: string; mimeType: string }[],
+    prioritizeOutfit: boolean
 ): Promise<string> {  // throws on failure — workflow will retry
     const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 
     const parts: GeminiPart[] = [];
+    const trimmedCustomPrompt = customPrompt.trim();
+    const faceFramingGuidance = prioritizeOutfit
+        ? "- Keep framing wide enough to show outfit and shoes when feasible"
+        : "- Keep framing aligned with scene/user intent; do not force full-body if not requested";
 
     parts.push({
-        text: `FACE REFERENCE PHOTOS (${faceImages.length} images):\nThese show the EXACT person to photograph. You MUST:\n- Preserve their face structure, skin tone, eye color, nose shape, jawline 100% accurately\n- Keep their hair color, length, and style EXACTLY as shown\n- Reproduce their clothing/outfit/style precisely — same colors, fabric, neckline\n- Frame the shot to show as much of the full outfit as possible, including shoes when feasible`,
+        text: `FACE REFERENCE PHOTOS (${faceImages.length} images):\nThese show the EXACT person to photograph. You MUST:\n- Preserve their face structure, skin tone, eye color, nose shape, jawline 100% accurately\n- Keep their hair color, length, and style EXACTLY as shown\n- Reproduce visible clothing/style cues as faithfully as possible\n${faceFramingGuidance}`,
     });
     for (const img of faceImages) {
         parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
@@ -555,15 +619,22 @@ async function generateOneImage(
 
     if (outfitImages.length > 0) {
         parts.push({
-            text: `OUTFIT REFERENCE PHOTOS (${outfitImages.length} images):\nUse these as wardrobe guidance. Prioritize similar clothing silhouette, color palette, fabrics, and styling details.`,
+            text: `OUTFIT REFERENCE PHOTOS (${outfitImages.length} images):\nUse these as wardrobe guidance. Prioritize similar clothing silhouette, color palette, fabrics, and styling details.${prioritizeOutfit ? " Keep outfit readability high in the composition." : ""}`,
         });
         for (const img of outfitImages) {
             parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
         }
     }
 
+    const customPromptBlock = trimmedCustomPrompt
+        ? `\n\nPRIORITY USER PROMPT (HIGHEST PRIORITY): ${trimmedCustomPrompt}\nWhen this prompt specifies pose/framing/styling, follow it over generic guidance unless it conflicts with identity or office consistency.`
+        : "";
+    const framingRule = prioritizeOutfit
+        ? "Prioritize wider framing so outfit and shoes stay visible whenever physically possible."
+        : "Respect requested framing in variation/user prompt and avoid forcing full-body framing when not requested.";
+
     parts.push({
-        text: `PHOTO SESSION STYLE: ${prompt}\n\nVARIATION INSTRUCTIONS: ${variation}\n\nIMPORTANT: Do NOT invent or change the person's facial expression. Reproduce it exactly as it appears in the reference photos. If they look neutral, keep it neutral. If they are slightly smiling, keep that. Prioritize wider framing so the outfit is visible from head to shoes (or at least below knees if full body is impossible). This should look like a REAL professional business photo session — not a passport photo, not an illustration.`,
+        text: `PHOTO SESSION STYLE: ${prompt}\n\nVARIATION INSTRUCTIONS: ${variation}${customPromptBlock}\n\nIMPORTANT: Do NOT invent or change the person's facial expression. Reproduce it exactly as it appears in reference photos. ${framingRule} The image must look like a real professional business photo session, not an illustration or passport photo.`,
     });
 
     console.log(`[Gemini] Calling API for variation: ${variation}`);

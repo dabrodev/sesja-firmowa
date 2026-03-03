@@ -24,6 +24,8 @@ export interface Photosession {
     outfitReferences: string[];
     customPrompt: string;
     requestedCount: number;
+    activeWorkflowInstanceId?: string | null;
+    activeWorkflowRunId?: string | null;
     results: string[];
     createdAt: Timestamp;
     updatedAt: Timestamp;
@@ -58,6 +60,10 @@ function normalizeSession(docId: string, data: Record<string, unknown>): Photose
         outfitReferences: normalizeStringArray(data.outfitReferences),
         customPrompt: typeof data.customPrompt === "string" ? data.customPrompt : "",
         requestedCount: normalizeRequestedCount(data.requestedCount),
+        activeWorkflowInstanceId:
+            typeof data.activeWorkflowInstanceId === "string" ? data.activeWorkflowInstanceId : undefined,
+        activeWorkflowRunId:
+            typeof data.activeWorkflowRunId === "string" ? data.activeWorkflowRunId : undefined,
         results: normalizeStringArray(data.results),
         createdAt: data.createdAt instanceof Timestamp ? data.createdAt : Timestamp.fromMillis(0),
         updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt : Timestamp.fromMillis(0),
@@ -83,6 +89,8 @@ export const sessionService = {
                 outfitReferences: data.outfitReferences ?? [],
                 customPrompt: data.customPrompt ?? "",
                 requestedCount: normalizeRequestedCount(data.requestedCount),
+                activeWorkflowInstanceId: data.activeWorkflowInstanceId ?? null,
+                activeWorkflowRunId: data.activeWorkflowRunId ?? null,
                 results: data.results ?? [],
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),

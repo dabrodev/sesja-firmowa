@@ -43,6 +43,8 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
             return;
         }
         const activeSessionId = session.id;
+        const workflowInstanceId = session.activeWorkflowInstanceId || activeSessionId;
+        const workflowRunId = session.activeWorkflowRunId || null;
 
         let cancelled = false;
 
@@ -51,7 +53,7 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
             setIsSyncingResults(true);
             try {
                 const response = await fetch(
-                    `/api/status?instanceId=${encodeURIComponent(activeSessionId)}`,
+                    `/api/status?instanceId=${encodeURIComponent(workflowInstanceId)}&sessionId=${encodeURIComponent(activeSessionId)}${workflowRunId ? `&runId=${encodeURIComponent(workflowRunId)}` : ""}`,
                     { cache: "no-store" }
                 );
                 if (!response.ok) return;
@@ -73,12 +75,20 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                         await sessionService.updateSession(activeSessionId, {
                             status: targetStatus,
                             results: mergedResults,
+                            activeWorkflowInstanceId: targetStatus === "completed" ? null : workflowInstanceId,
+                            activeWorkflowRunId: targetStatus === "completed" ? null : workflowRunId,
                         });
 
                         if (!cancelled) {
                             setSession((prev) => {
                                 if (!prev) return prev;
-                                return { ...prev, status: targetStatus, results: mergedResults };
+                                return {
+                                    ...prev,
+                                    status: targetStatus,
+                                    results: mergedResults,
+                                    activeWorkflowInstanceId: targetStatus === "completed" ? null : workflowInstanceId,
+                                    activeWorkflowRunId: targetStatus === "completed" ? null : workflowRunId,
+                                };
                             });
                         }
                     }
@@ -86,9 +96,17 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                 }
 
                 if (data.status === "errored" || data.status === "terminated") {
-                    await sessionService.updateSession(activeSessionId, { status: "failed" });
+                    await sessionService.updateSession(activeSessionId, {
+                        status: "failed",
+                        activeWorkflowInstanceId: null,
+                        activeWorkflowRunId: null,
+                    });
                     if (!cancelled) {
-                        setSession((prev) => (prev ? { ...prev, status: "failed" } : prev));
+                        setSession((prev) =>
+                            prev
+                                ? { ...prev, status: "failed", activeWorkflowInstanceId: null, activeWorkflowRunId: null }
+                                : prev
+                        );
                     }
                 }
             } catch (error) {
@@ -448,6 +466,9 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                                     placeholder="Np. osoba stojąca bokiem, formalna koszula, naturalny newsroom look."
                                                     className="min-h-[100px] border-white/10 bg-white/5 text-white placeholder:text-zinc-500"
                                                 />
+                                                <p className="text-xs text-zinc-500">
+                                                    Ten prompt ma najwyższy priorytet. Jeśli zostawisz puste pole, użyjemy domyślnego ustawienia kadru i stylu.
+                                                </p>
                                             </div>
                                         </div>
 

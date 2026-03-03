@@ -298,7 +298,7 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                     className="min-h-[110px] border-white/10 bg-white/5 text-white placeholder:text-zinc-500"
                                                 />
                                                 <p className="text-xs text-zinc-500">
-                                                    Ten tekst doprecyzowuje pozę, styl i ubiór. To kontynuacja sesji, nie osobny generator.
+                                                    Jeśli podasz prompt, ma najwyższy priorytet dla kadru/pozy/stylu. Gdy pole jest puste, użyjemy domyślnego stylu biznesowego.
                                                 </p>
                                             </div>
                                         </div>
@@ -331,6 +331,8 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                             customPrompt: trimmedPrompt,
                                                             requestedCount,
                                                             status: "processing" as const,
+                                                            activeWorkflowInstanceId: null,
+                                                            activeWorkflowRunId: null,
                                                         };
 
                                                         if (!activeSessionId) {
@@ -343,6 +345,10 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                         } else {
                                                             await sessionService.updateSession(activeSessionId, sessionUpdatePayload);
                                                         }
+                                                        if (!activeSessionId) {
+                                                            throw new Error("Nie udało się zapisać sesji.");
+                                                        }
+                                                        const persistedSessionId = activeSessionId;
 
                                                         await userService.deductCredits(user.uid, cost);
 
@@ -352,7 +358,7 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                             method: "POST",
                                                             headers: { "Content-Type": "application/json" },
                                                             body: JSON.stringify({
-                                                                sessionId: activeSessionId,
+                                                                sessionId: persistedSessionId,
                                                                 uid: user.uid,
                                                                 faceKeys: faceAssets.map((a) => a.id),
                                                                 officeKeys: officeAssets.slice(0, 1).map((a) => a.id),
@@ -369,6 +375,10 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                         }
 
                                                         const { instanceId } = await resp.json() as { instanceId: string };
+                                                        await sessionService.updateSession(persistedSessionId, {
+                                                            activeWorkflowInstanceId: instanceId,
+                                                            activeWorkflowRunId: runId,
+                                                        });
                                                         setGenerationStatus("Analizuję zdjęcia referencyjne...");
                                                         let attempts = 0;
                                                         const maxAttempts = 120;
@@ -378,7 +388,7 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                                 attempts++;
                                                                 try {
                                                                     const sr = await fetch(
-                                                                        `/api/status?instanceId=${encodeURIComponent(instanceId)}&runId=${encodeURIComponent(runId)}`
+                                                                        `/api/status?instanceId=${encodeURIComponent(instanceId)}&runId=${encodeURIComponent(runId)}&sessionId=${encodeURIComponent(persistedSessionId)}`
                                                                     );
                                                                     const data = await sr.json() as { status: string; output?: { resultUrls: string[] }; error?: string };
 
@@ -400,16 +410,19 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
 
                                                                     if (data.status === "complete") {
                                                                         clearInterval(poll);
-                                                                        if (!activeSessionId) {
-                                                                            throw new Error("Nie udało się zapisać sesji.");
-                                                                        }
                                                                         if (sessionId) {
-                                                                            await sessionService.appendResults(activeSessionId, data.output?.resultUrls || []);
-                                                                            await sessionService.updateSession(activeSessionId, { status: "completed" });
+                                                                            await sessionService.appendResults(persistedSessionId, data.output?.resultUrls || []);
+                                                                            await sessionService.updateSession(persistedSessionId, {
+                                                                                status: "completed",
+                                                                                activeWorkflowInstanceId: null,
+                                                                                activeWorkflowRunId: null,
+                                                                            });
                                                                         } else {
-                                                                            await sessionService.updateSession(activeSessionId, {
+                                                                            await sessionService.updateSession(persistedSessionId, {
                                                                                 results: data.output?.resultUrls || [],
-                                                                                status: "completed"
+                                                                                status: "completed",
+                                                                                activeWorkflowInstanceId: null,
+                                                                                activeWorkflowRunId: null,
                                                                             });
                                                                         }
                                                                         setIsGenerating(false);
@@ -431,7 +444,11 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                     } catch (error: unknown) {
                                                         console.error("Failed to generate:", error);
                                                         if (activeSessionId) {
-                                                            await sessionService.updateSession(activeSessionId, { status: "failed" });
+                                                            await sessionService.updateSession(activeSessionId, {
+                                                                status: "failed",
+                                                                activeWorkflowInstanceId: null,
+                                                                activeWorkflowRunId: null,
+                                                            });
                                                         }
                                                         alert("Błąd generowania: " + (error instanceof Error ? error.message : "Nieznany błąd"));
                                                         setIsGenerating(false);

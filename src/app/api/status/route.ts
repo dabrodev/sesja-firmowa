@@ -8,6 +8,7 @@ export async function GET(req: NextRequest) {
     try {
         const instanceId = req.nextUrl.searchParams.get("instanceId");
         const runId = req.nextUrl.searchParams.get("runId");
+        const sessionId = req.nextUrl.searchParams.get("sessionId");
         if (!instanceId) {
             return NextResponse.json({ error: "Missing instanceId" }, { status: 400 });
         }
@@ -21,6 +22,9 @@ export async function GET(req: NextRequest) {
         workerStatusUrl.searchParams.set("instanceId", instanceId);
         if (runId) {
             workerStatusUrl.searchParams.set("runId", runId);
+        }
+        if (sessionId) {
+            workerStatusUrl.searchParams.set("sessionId", sessionId);
         }
 
         const resp = await fetch(workerStatusUrl.toString());
