@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use, useCallback } from "react";
 import { useAuth } from "@/components/auth-provider";
-import { sessionService, Photosession } from "@/lib/sessions";
+import { sessionService, Photosession, PromptRunTrace } from "@/lib/sessions";
 import { Camera, Calendar, ArrowLeft, Loader2, Download, ExternalLink, ImageIcon, PencilLine, Save, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -60,9 +60,24 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
 
                 const data = await response.json() as {
                     status: "queued" | "running" | "complete" | "errored" | "terminated";
-                    output?: { resultUrls?: string[] };
+                    output?: { resultUrls?: string[]; promptDebug?: PromptRunTrace };
                 };
                 if (cancelled) return;
+
+                const promptDebug = data.output?.promptDebug;
+                if (promptDebug) {
+                    const alreadySaved = session.promptRuns.some((run) => run.runId === promptDebug.runId);
+                    if (!alreadySaved) {
+                        await sessionService.upsertPromptRun(activeSessionId, promptDebug);
+                        if (!cancelled) {
+                            setSession((prev) => {
+                                if (!prev) return prev;
+                                if (prev.promptRuns.some((run) => run.runId === promptDebug.runId)) return prev;
+                                return { ...prev, promptRuns: [promptDebug, ...prev.promptRuns].slice(0, 50) };
+                            });
+                        }
+                    }
+                }
 
                 const workflowResults = data.output?.resultUrls ?? [];
                 if (workflowResults.length > 0) {
@@ -260,6 +275,7 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
             : isSyncingResults
                 ? "Sprawdzamy workflow i pobieramy gotowe zdjęcia do tej sesji..."
                 : "To może potrwać kilka minut. Odśwież stronę za moment, aby sprawdzić wyniki.";
+    const latestPromptRun = session.promptRuns[0] ?? null;
 
     return (
         <div className="min-h-screen bg-[#020617] text-white selection:bg-blue-500/30 font-sans pb-20">
@@ -573,6 +589,41 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                                     {session.customPrompt ? session.customPrompt : "brak (użyty zostanie prompt bazowy)"}
                                                 </span>
                                             </div>
+                                        </div>
+
+                                        <div className="space-y-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                                            <div className="text-xs uppercase tracking-wide text-zinc-500">Podgląd promptów workflow</div>
+                                            {latestPromptRun ? (
+                                                <>
+                                                    <div className="text-xs text-zinc-400">
+                                                        Run: <span className="font-mono text-zinc-300">{latestPromptRun.runId}</span>
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <div className="text-xs text-zinc-500">Prompt bazowy (systemowy dla sesji)</div>
+                                                        <pre className="whitespace-pre-wrap rounded-lg border border-white/10 bg-zinc-950/70 p-2 text-xs text-zinc-200">
+                                                            {latestPromptRun.stylePrompt}
+                                                        </pre>
+                                                    </div>
+                                                    {latestPromptRun.imagePrompts.map((imagePrompt) => (
+                                                        <details
+                                                            key={`${latestPromptRun.runId}-${imagePrompt.index}`}
+                                                            className="rounded-lg border border-white/10 bg-zinc-950/70 p-2"
+                                                        >
+                                                            <summary className="cursor-pointer text-xs font-medium text-zinc-300">
+                                                                Prompt zdjęcia {imagePrompt.index}
+                                                            </summary>
+                                                            <p className="mt-2 text-[11px] text-zinc-500">{imagePrompt.variation}</p>
+                                                            <pre className="mt-2 whitespace-pre-wrap text-xs text-zinc-200">
+                                                                {imagePrompt.finalPrompt}
+                                                            </pre>
+                                                        </details>
+                                                    ))}
+                                                </>
+                                            ) : (
+                                                <p className="text-xs text-zinc-500">
+                                                    Brak zapisanych promptów dla tej sesji. Pojawią się po zakończeniu kolejnej generacji.
+                                                </p>
+                                            )}
                                         </div>
 
                                         {session.officeReferences.length > 1 ? (

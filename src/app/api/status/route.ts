@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
         }
 
         const resp = await fetch(workerStatusUrl.toString());
-        const data = await resp.json() as { status: string; output?: { resultUrls: string[] }; error?: string };
+        const data = await resp.json() as { status: string; output?: { resultUrls?: string[]; promptDebug?: unknown }; error?: string };
 
         return NextResponse.json(data);
     } catch (error: unknown) {

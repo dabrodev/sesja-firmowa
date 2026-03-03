@@ -24,6 +24,7 @@ type GenerateParams = {
     customPrompt?: string;
     requestedCount?: number;
     runId?: string;
+    workflowInstanceId?: string;
 };
 
 type WorkerUrl = "https://sesja-firmowa.damiandabrodev.workers.dev";
@@ -35,6 +36,22 @@ type GeminiPart =
 
 type AzureChatCompletionResponse = {
     choices?: Array<{ message?: { content?: string } }>;
+};
+
+type PromptDebugImagePrompt = {
+    index: number;
+    variation: string;
+    finalPrompt: string;
+};
+
+type PromptDebugPayload = {
+    runId: string;
+    workflowInstanceId: string;
+    stylePrompt: string;
+    customPrompt: string;
+    prioritizeOutfit: boolean;
+    imagePrompts: PromptDebugImagePrompt[];
+    createdAtIso: string;
 };
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -119,6 +136,7 @@ export class GenerationWorkflow extends WorkflowEntrypoint<Env, GenerateParams> 
             customPrompt = "",
             requestedCount,
             runId,
+            workflowInstanceId = "",
         } = event.payload;
         const safeRequestedCount = normalizeRequestedCount(requestedCount);
         const safeRunId = runId?.trim() || Date.now().toString();
@@ -146,9 +164,26 @@ export class GenerationWorkflow extends WorkflowEntrypoint<Env, GenerateParams> 
             ? OUTFIT_PRIORITY_VARIATIONS
             : DEFAULT_VARIATIONS;
         const variations = variationPool.slice(0, safeRequestedCount);
+        const imagePrompts = variations.map((variation, index) => ({
+            index: index + 1,
+            variation,
+            finalPrompt: buildFinalImagePrompt(prompt, customPrompt, variation, prioritizeOutfit),
+        }));
 
-        for (let i = 0; i < variations.length; i++) {
-            const variation = variations[i];
+        const promptDebug: PromptDebugPayload = {
+            runId: safeRunId,
+            workflowInstanceId,
+            stylePrompt: prompt,
+            customPrompt: customPrompt.trim(),
+            prioritizeOutfit,
+            imagePrompts,
+            createdAtIso: new Date().toISOString(),
+        };
+
+        console.log(`[Workflow] Prompt debug for session ${sessionId}, run ${safeRunId}: ${JSON.stringify(promptDebug)}`);
+
+        for (let i = 0; i < imagePrompts.length; i++) {
+            const { variation, finalPrompt } = imagePrompts[i];
             const key = await step.do(`generate-variation-${i + 1}`, {
                 retries: { limit: 2, delay: "10 seconds", backoff: "linear" },
             }, async () => {
@@ -164,13 +199,11 @@ export class GenerationWorkflow extends WorkflowEntrypoint<Env, GenerateParams> 
                 // Generate one image with Gemini
                 const base64Image = await generateOneImage(
                     this.env,
-                    prompt,
-                    customPrompt,
+                    finalPrompt,
                     variation,
                     faceImages,
                     officeImages,
-                    outfitImages,
-                    prioritizeOutfit
+                    outfitImages
                 );
 
                 // Save immediately to R2 — return only the key (small string)
@@ -191,7 +224,7 @@ export class GenerationWorkflow extends WorkflowEntrypoint<Env, GenerateParams> 
         // Build result URLs (served via Worker's /file endpoint)
         const resultUrls = resultKeys.map(k => `${workerUrl}/file?key=${encodeURIComponent(k)}`);
 
-        return { resultUrls, sessionId };
+        return { resultUrls, sessionId, promptDebug };
     }
 }
 
@@ -301,6 +334,7 @@ const workerHandler = {
                         customPrompt: normalizedCustomPrompt,
                         requestedCount: normalizeRequestedCount(requestedCount),
                         runId: normalizedRunId,
+                        workflowInstanceId,
                     },
                 });
 
@@ -405,7 +439,7 @@ const workerHandler = {
             try {
                 const instance = await env.GENERATION_WORKFLOW.get(instanceId);
                 const status = await instance.status();
-                const statusOutput = status.output as { resultUrls?: string[] } | undefined;
+                const statusOutput = status.output as { resultUrls?: string[]; promptDebug?: PromptDebugPayload } | undefined;
                 const workflowResultUrls = statusOutput?.resultUrls ?? [];
 
                 let discoveredUrls: string[] = [];
@@ -591,26 +625,37 @@ function getDefaultPrompt(customPrompt: string, prioritizeOutfit: boolean): stri
 
 // ─── Generate one image with Gemini ──────────────────────────────────────────
 
-async function generateOneImage(
-    env: Env,
+function buildFinalImagePrompt(
     prompt: string,
     customPrompt: string,
     variation: string,
+    prioritizeOutfit: boolean
+): string {
+    const trimmedCustomPrompt = customPrompt.trim();
+    const customPromptBlock = trimmedCustomPrompt
+        ? `\n\nPRIORITY USER PROMPT (HIGHEST PRIORITY): ${trimmedCustomPrompt}\nWhen this prompt specifies pose/framing/styling, follow it over generic guidance unless it conflicts with identity or office consistency.`
+        : "";
+    const framingRule = prioritizeOutfit
+        ? "Prioritize wider framing so outfit and shoes stay visible whenever physically possible."
+        : "Respect requested framing in variation/user prompt and avoid forcing full-body framing when not requested.";
+
+    return `PHOTO SESSION STYLE: ${prompt}\n\nVARIATION INSTRUCTIONS: ${variation}${customPromptBlock}\n\nIMPORTANT: Do NOT invent or change the person's facial expression. Reproduce it exactly as it appears in reference photos. ${framingRule} The image must look like a real professional business photo session, not an illustration or passport photo.`;
+}
+
+async function generateOneImage(
+    env: Env,
+    finalImagePrompt: string,
+    variation: string,
     faceImages: { base64: string; mimeType: string }[],
     officeImages: { base64: string; mimeType: string }[],
-    outfitImages: { base64: string; mimeType: string }[],
-    prioritizeOutfit: boolean
+    outfitImages: { base64: string; mimeType: string }[]
 ): Promise<string> {  // throws on failure — workflow will retry
     const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 
     const parts: GeminiPart[] = [];
-    const trimmedCustomPrompt = customPrompt.trim();
-    const faceFramingGuidance = prioritizeOutfit
-        ? "- Keep framing wide enough to show outfit and shoes when feasible"
-        : "- Keep framing aligned with scene/user intent; do not force full-body if not requested";
 
     parts.push({
-        text: `FACE REFERENCE PHOTOS (${faceImages.length} images):\nThese show the EXACT person to photograph. You MUST:\n- Preserve their face structure, skin tone, eye color, nose shape, jawline 100% accurately\n- Keep their hair color, length, and style EXACTLY as shown\n- Reproduce visible clothing/style cues as faithfully as possible\n${faceFramingGuidance}`,
+        text: `FACE REFERENCE PHOTOS (${faceImages.length} images):\nThese show the EXACT person to photograph. You MUST:\n- Preserve their face structure, skin tone, eye color, nose shape, jawline 100% accurately\n- Keep their hair color, length, and style EXACTLY as shown\n- Reproduce visible clothing/style cues as faithfully as possible`,
     });
     for (const img of faceImages) {
         parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
@@ -625,22 +670,15 @@ async function generateOneImage(
 
     if (outfitImages.length > 0) {
         parts.push({
-            text: `OUTFIT REFERENCE PHOTOS (${outfitImages.length} images):\nUse these as wardrobe guidance. Prioritize similar clothing silhouette, color palette, fabrics, and styling details.${prioritizeOutfit ? " Keep outfit readability high in the composition." : ""}`,
+            text: `OUTFIT REFERENCE PHOTOS (${outfitImages.length} images):\nUse these as wardrobe guidance. Prioritize similar clothing silhouette, color palette, fabrics, and styling details.`,
         });
         for (const img of outfitImages) {
             parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
         }
     }
 
-    const customPromptBlock = trimmedCustomPrompt
-        ? `\n\nPRIORITY USER PROMPT (HIGHEST PRIORITY): ${trimmedCustomPrompt}\nWhen this prompt specifies pose/framing/styling, follow it over generic guidance unless it conflicts with identity or office consistency.`
-        : "";
-    const framingRule = prioritizeOutfit
-        ? "Prioritize wider framing so outfit and shoes stay visible whenever physically possible."
-        : "Respect requested framing in variation/user prompt and avoid forcing full-body framing when not requested.";
-
     parts.push({
-        text: `PHOTO SESSION STYLE: ${prompt}\n\nVARIATION INSTRUCTIONS: ${variation}${customPromptBlock}\n\nIMPORTANT: Do NOT invent or change the person's facial expression. Reproduce it exactly as it appears in reference photos. ${framingRule} The image must look like a real professional business photo session, not an illustration or passport photo.`,
+        text: finalImagePrompt,
     });
 
     console.log(`[Gemini] Calling API for variation: ${variation}`);

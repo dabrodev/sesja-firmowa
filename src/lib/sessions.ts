@@ -14,6 +14,22 @@ import { db } from "./firebase";
 
 const DEFAULT_REQUESTED_COUNT = 4;
 
+export interface PromptRunImagePrompt {
+    index: number;
+    variation: string;
+    finalPrompt: string;
+}
+
+export interface PromptRunTrace {
+    runId: string;
+    workflowInstanceId: string;
+    stylePrompt: string;
+    customPrompt: string;
+    prioritizeOutfit: boolean;
+    imagePrompts: PromptRunImagePrompt[];
+    createdAtIso: string;
+}
+
 export interface Photosession {
     id?: string;
     userId: string;
@@ -26,6 +42,7 @@ export interface Photosession {
     requestedCount: number;
     activeWorkflowInstanceId?: string | null;
     activeWorkflowRunId?: string | null;
+    promptRuns: PromptRunTrace[];
     results: string[];
     createdAt: Timestamp;
     updatedAt: Timestamp;
@@ -39,6 +56,54 @@ function normalizeStringArray(value: unknown): string[] {
 function normalizeRequestedCount(value: unknown): number {
     if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_REQUESTED_COUNT;
     return Math.min(5, Math.max(1, Math.round(value)));
+}
+
+function normalizePromptRuns(value: unknown): PromptRunTrace[] {
+    if (!Array.isArray(value)) return [];
+
+    return value.flatMap((item) => {
+        if (!item || typeof item !== "object") return [];
+        const candidate = item as Record<string, unknown>;
+        if (
+            typeof candidate.runId !== "string" ||
+            typeof candidate.workflowInstanceId !== "string" ||
+            typeof candidate.stylePrompt !== "string"
+        ) {
+            return [];
+        }
+
+        const imagePrompts = Array.isArray(candidate.imagePrompts)
+            ? candidate.imagePrompts.flatMap((promptItem) => {
+                if (!promptItem || typeof promptItem !== "object") return [];
+                const promptCandidate = promptItem as Record<string, unknown>;
+                if (
+                    typeof promptCandidate.index !== "number" ||
+                    typeof promptCandidate.variation !== "string" ||
+                    typeof promptCandidate.finalPrompt !== "string"
+                ) {
+                    return [];
+                }
+                return [{
+                    index: promptCandidate.index,
+                    variation: promptCandidate.variation,
+                    finalPrompt: promptCandidate.finalPrompt,
+                }];
+            })
+            : [];
+
+        return [{
+            runId: candidate.runId,
+            workflowInstanceId: candidate.workflowInstanceId,
+            stylePrompt: candidate.stylePrompt,
+            customPrompt: typeof candidate.customPrompt === "string" ? candidate.customPrompt : "",
+            prioritizeOutfit: candidate.prioritizeOutfit === true,
+            imagePrompts,
+            createdAtIso:
+                typeof candidate.createdAtIso === "string"
+                    ? candidate.createdAtIso
+                    : new Date(0).toISOString(),
+        }];
+    });
 }
 
 function normalizeSession(docId: string, data: Record<string, unknown>): Photosession {
@@ -64,6 +129,7 @@ function normalizeSession(docId: string, data: Record<string, unknown>): Photose
             typeof data.activeWorkflowInstanceId === "string" ? data.activeWorkflowInstanceId : undefined,
         activeWorkflowRunId:
             typeof data.activeWorkflowRunId === "string" ? data.activeWorkflowRunId : undefined,
+        promptRuns: normalizePromptRuns(data.promptRuns),
         results: normalizeStringArray(data.results),
         createdAt: data.createdAt instanceof Timestamp ? data.createdAt : Timestamp.fromMillis(0),
         updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt : Timestamp.fromMillis(0),
@@ -91,6 +157,7 @@ export const sessionService = {
                 requestedCount: normalizeRequestedCount(data.requestedCount),
                 activeWorkflowInstanceId: data.activeWorkflowInstanceId ?? null,
                 activeWorkflowRunId: data.activeWorkflowRunId ?? null,
+                promptRuns: data.promptRuns ?? [],
                 results: data.results ?? [],
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
@@ -126,6 +193,33 @@ export const sessionService = {
             });
         } catch (error) {
             console.error("Error appending results to session:", error);
+            throw error;
+        }
+    },
+
+    async upsertPromptRun(sessionId: string, promptRun: PromptRunTrace) {
+        try {
+            const docRef = doc(db, "sessions", sessionId);
+            const { getDoc } = await import("firebase/firestore");
+            const snap = await getDoc(docRef);
+            if (!snap.exists()) {
+                return;
+            }
+
+            const rawData = snap.data() as Record<string, unknown>;
+            const currentPromptRuns = normalizePromptRuns(rawData.promptRuns);
+            const existingIndex = currentPromptRuns.findIndex((run) => run.runId === promptRun.runId);
+            const nextPromptRuns =
+                existingIndex >= 0
+                    ? currentPromptRuns.map((run, index) => (index === existingIndex ? promptRun : run))
+                    : [promptRun, ...currentPromptRuns].slice(0, 50);
+
+            await updateDoc(docRef, {
+                promptRuns: nextPromptRuns,
+                updatedAt: serverTimestamp(),
+            });
+        } catch (error) {
+            console.error("Error upserting prompt run:", error);
             throw error;
         }
     },

@@ -17,7 +17,7 @@ import { useAppStore } from "@/lib/store";
 import { PhotoUploader } from "@/components/photo-uploader";
 import { GenerationResults } from "@/components/generation-results";
 import { useAuth } from "@/components/auth-provider";
-import { sessionService, Photosession } from "@/lib/sessions";
+import { sessionService, Photosession, PromptRunTrace } from "@/lib/sessions";
 import { userService } from "@/lib/users";
 import { cn } from "@/lib/utils";
 import { CopyPlus } from "lucide-react";
@@ -390,7 +390,11 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                                     const sr = await fetch(
                                                                         `/api/status?instanceId=${encodeURIComponent(instanceId)}&runId=${encodeURIComponent(runId)}&sessionId=${encodeURIComponent(persistedSessionId)}`
                                                                     );
-                                                                    const data = await sr.json() as { status: string; output?: { resultUrls: string[] }; error?: string };
+                                                                    const data = await sr.json() as {
+                                                                        status: string;
+                                                                        output?: { resultUrls?: string[]; promptDebug?: PromptRunTrace };
+                                                                        error?: string;
+                                                                    };
 
                                                                     if (attempts < 5) {
                                                                         setGenerationStatus("Generuję opis fotograficzny...");
@@ -424,6 +428,9 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                                                 activeWorkflowInstanceId: null,
                                                                                 activeWorkflowRunId: null,
                                                                             });
+                                                                        }
+                                                                        if (data.output?.promptDebug) {
+                                                                            await sessionService.upsertPromptRun(persistedSessionId, data.output.promptDebug);
                                                                         }
                                                                         setIsGenerating(false);
                                                                         resolve();
