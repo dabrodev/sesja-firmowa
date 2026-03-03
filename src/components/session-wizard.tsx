@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { User, Building2, Sparkles, ChevronRight, ChevronLeft, CheckCircle2 } from "lucide-react";
+import { User, Building2, Sparkles, ChevronRight, ChevronLeft, CheckCircle2, Coins } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,6 +22,7 @@ import { userService } from "@/lib/users";
 import { cn } from "@/lib/utils";
 import { CopyPlus } from "lucide-react";
 import { referenceUrlToPhotoAsset } from "@/lib/reference-assets";
+import Link from "next/link";
 
 type WizardStepId = "face" | "office" | "generate";
 const COST_PER_PHOTO = 30;
@@ -106,6 +107,10 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
         { id: "generate", label: "Generuj", icon: <Sparkles className="h-4 w-4" />, completed: hasCompleted }
     ];
     const totalCost = requestedCount * COST_PER_PHOTO;
+    const availableCredits = userProfile?.credits ?? 0;
+    const missingCredits = Math.max(0, totalCost - availableCredits);
+    const hasKnownCredits = typeof userProfile?.credits === "number";
+    const hasEnoughCredits = hasKnownCredits && availableCredits >= totalCost;
 
     if (!user) {
         return null;
@@ -285,6 +290,48 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                     <div className="text-xs text-zinc-400">{COST_PER_PHOTO} PKT za każde zdjęcie</div>
                                                 </div>
                                             </div>
+                                            <div
+                                                className={cn(
+                                                    "rounded-xl border px-4 py-3 text-sm",
+                                                    hasEnoughCredits
+                                                        ? "border-emerald-500/20 bg-emerald-500/10"
+                                                        : "border-red-500/20 bg-red-500/10"
+                                                )}
+                                            >
+                                                <div className="flex items-center gap-2 text-zinc-200">
+                                                    <Coins className="h-4 w-4" />
+                                                    <span>
+                                                        Twoje saldo: <span className="font-semibold text-white">{availableCredits} PKT</span>
+                                                    </span>
+                                                </div>
+                                                {hasEnoughCredits ? (
+                                                    <p className="mt-1 text-xs text-emerald-200">
+                                                        Masz wystarczającą liczbę punktów, możesz uruchomić generowanie.
+                                                    </p>
+                                                ) : (
+                                                    <>
+                                                        <p className="mt-1 text-xs text-red-200">
+                                                            Brak punktów. Brakuje <span className="font-semibold text-white">{missingCredits} PKT</span> do tej generacji.
+                                                        </p>
+                                                        <div className="mt-3 flex flex-wrap gap-2">
+                                                            <Link href="/kredyty">
+                                                                <Button size="sm" className="bg-red-600 hover:bg-red-500 text-white">
+                                                                    Doładuj kredyty
+                                                                </Button>
+                                                            </Link>
+                                                            <Link href="/wolny-generator">
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    className="border-white/20 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                                                                >
+                                                                    Użyj wolnego generatora
+                                                                </Button>
+                                                            </Link>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
 
                                             <div className="space-y-2">
                                                 <label htmlFor="session-custom-prompt" className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
@@ -306,15 +353,11 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                         <div className="flex flex-col items-center gap-4 pt-4">
                                             <Button
                                                 size="lg"
-                                                disabled={isGenerating || (userProfile ? userProfile.credits < totalCost : true)}
+                                                disabled={isGenerating || !hasEnoughCredits}
                                                 onClick={async () => {
                                                     if (!user) return;
+                                                    if (!hasEnoughCredits) return;
                                                     const cost = requestedCount * COST_PER_PHOTO;
-
-                                                    if (userProfile && userProfile.credits < cost) {
-                                                        alert("Brak punktów. Potrzebujesz " + cost + " pkt.");
-                                                        return;
-                                                    }
 
                                                     setIsGenerating(true);
                                                     setHasCompleted(false);
