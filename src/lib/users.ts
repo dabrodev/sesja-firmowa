@@ -4,6 +4,8 @@ import {
     setDoc,
     updateDoc,
     onSnapshot,
+    type FieldValue,
+    Timestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -12,7 +14,7 @@ export interface UserProfile {
     isBetaTester: boolean;
     credits: number;
     email: string;
-    createdAt?: any;
+    createdAt?: Timestamp | FieldValue;
     pushToken?: string;
 }
 

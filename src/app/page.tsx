@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, Box, Camera, Clock, Layout, Sparkles, UserCheck, Zap } from "lucide-react";
+import { ArrowRight, Camera, Clock, Sparkles, UserCheck, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -120,7 +120,7 @@ export default function Home() {
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator className="bg-white/10" />
                   <DropdownMenuItem className="focus:bg-white/5 focus:text-white cursor-pointer" asChild>
-                    <Link href="/projekty">moje projekty</Link>
+                    <Link href="/sesje">moje sesje</Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem className="focus:bg-white/5 focus:text-white cursor-pointer" asChild>
                     <Link href="/wolny-generator">wolny generator</Link>
@@ -145,6 +145,13 @@ export default function Home() {
               >
                 Zaloguj
               </Button>
+            )}
+            {user && (
+              <Link href="/sesje">
+                <Button variant="ghost" className="text-white/70 hover:bg-white/5 hover:text-white px-2 sm:px-4 text-xs sm:text-sm">
+                  moje sesje
+                </Button>
+              </Link>
             )}
             <Link href="/generator">
               <Button className="bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-500/25 px-3 sm:px-6 h-8 sm:h-10 text-xs sm:text-sm">

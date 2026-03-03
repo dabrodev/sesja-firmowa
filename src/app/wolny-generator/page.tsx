@@ -12,6 +12,7 @@ import { PhotoAsset } from "@/lib/store";
 
 export default function CustomGeneratorPage() {
     const { user } = useAuth();
+    const userId = user?.uid ?? "";
     const [prompt, setPrompt] = useState("");
     const [isGenerating, setIsGenerating] = useState(false);
     const [resultUrl, setResultUrl] = useState<string | null>(null);
@@ -45,9 +46,9 @@ export default function CustomGeneratorPage() {
 
             const data = await res.json() as { url: string };
             setResultUrl(data.url);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error("Failed to generate custom image:", err);
-            setError(err.message || "Błąd generowania");
+            setError(err instanceof Error ? err.message : "Błąd generowania");
         } finally {
             setIsGenerating(false);
         }
@@ -80,7 +81,7 @@ export default function CustomGeneratorPage() {
                                 onUpload={addAsset}
                                 onRemove={removeAsset}
                                 maxFiles={5}
-                                userId={user?.uid!}
+                                userId={userId}
                                 assetType="face"
                             />
                         </div>

@@ -1,11 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 
+type GenerateRequestBody = {
+    sessionId: string;
+    uid: string;
+    faceKeys: string[];
+    officeKeys: string[];
+};
+
+function getErrorMessage(error: unknown, fallback: string): string {
+    return error instanceof Error ? error.message : fallback;
+}
+
 export async function POST(req: NextRequest) {
     try {
-        const body = await req.json() as any;
+        const body = await req.json() as Partial<GenerateRequestBody>;
         const { sessionId, uid, faceKeys, officeKeys } = body;
 
-        if (!sessionId || !uid || !faceKeys?.length || !officeKeys?.length) {
+        if (!sessionId || !uid || !Array.isArray(faceKeys) || faceKeys.length === 0 || !Array.isArray(officeKeys) || officeKeys.length === 0) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
         }
 
@@ -32,8 +43,8 @@ export async function POST(req: NextRequest) {
         const result = await workerResp.json() as { instanceId: string; status: string };
         return NextResponse.json(result, { status: 202 });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Generate route error:", error);
-        return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+        return NextResponse.json({ error: getErrorMessage(error, "Internal Server Error") }, { status: 500 });
     }
 }

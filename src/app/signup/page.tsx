@@ -7,6 +7,15 @@ import { Camera, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
+function getErrorCode(error: unknown): string | null {
+    if (typeof error !== "object" || error === null || !("code" in error)) {
+        return null;
+    }
+
+    const code = (error as { code?: unknown }).code;
+    return typeof code === "string" ? code : null;
+}
+
 function SignUpContent() {
     const { loginWithGoogle, signUpWithEmail } = useAuth();
     const [email, setEmail] = useState("");
@@ -15,14 +24,14 @@ function SignUpContent() {
     const [error, setError] = useState("");
     const router = useRouter();
     const searchParams = useSearchParams();
-    const callbackUrl = searchParams.get("callbackUrl") || "/generator";
+    const callbackUrl = searchParams.get("callbackUrl") || "/sesje";
 
     const handleGoogleLogin = async () => {
         try {
             setLoading(true);
             await loginWithGoogle();
             router.push(callbackUrl);
-        } catch (err) {
+        } catch {
             setError("Rejestracja przez Google nie powiodła się.");
         } finally {
             setLoading(false);
@@ -40,8 +49,9 @@ function SignUpContent() {
             setError("");
             await signUpWithEmail(email, password);
             router.push(callbackUrl);
-        } catch (err: any) {
-            if (err.code === "auth/email-already-in-use") {
+        } catch (err: unknown) {
+            const code = getErrorCode(err);
+            if (code === "auth/email-already-in-use") {
                 setError("Ten e-mail jest już w użyciu.");
             } else {
                 setError("Wystąpił błąd podczas rejestracji.");

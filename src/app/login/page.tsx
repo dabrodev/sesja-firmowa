@@ -3,7 +3,7 @@
 import { useState, Suspense } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
-import { Camera, Github, Loader2, Mail } from "lucide-react";
+import { Camera, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -15,14 +15,14 @@ function LoginContent() {
     const [error, setError] = useState("");
     const router = useRouter();
     const searchParams = useSearchParams();
-    const callbackUrl = searchParams.get("callbackUrl") || "/generator";
+    const callbackUrl = searchParams.get("callbackUrl") || "/sesje";
 
     const handleGoogleLogin = async () => {
         try {
             setLoading(true);
             await loginWithGoogle();
             router.push(callbackUrl);
-        } catch (err) {
+        } catch {
             setError("Logowanie przez Google nie powiodło się.");
         } finally {
             setLoading(false);
@@ -36,7 +36,7 @@ function LoginContent() {
             setError("");
             await signInWithEmail(email, password);
             router.push(callbackUrl);
-        } catch (err: any) {
+        } catch {
             setError("Nieprawidłowy e-mail lub hasło.");
         } finally {
             setLoading(false);

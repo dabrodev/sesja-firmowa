@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
+function getErrorMessage(error: unknown, fallback: string): string {
+    return error instanceof Error ? error.message : fallback;
+}
+
 export async function GET(req: NextRequest) {
     try {
         const instanceId = req.nextUrl.searchParams.get("instanceId");
@@ -16,8 +20,8 @@ export async function GET(req: NextRequest) {
         const data = await resp.json() as { status: string; output?: { resultUrls: string[] }; error?: string };
 
         return NextResponse.json(data);
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Status route error:", error);
-        return NextResponse.json({ error: error.message || "Failed to get status" }, { status: 500 });
+        return NextResponse.json({ error: getErrorMessage(error, "Failed to get status") }, { status: 500 });
     }
 }

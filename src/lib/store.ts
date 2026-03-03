@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { Photosession } from "./sessions";
 
 export interface PhotoAsset {
     id: string;
@@ -23,7 +24,7 @@ export interface Office {
 interface AppState {
     currentPersona: Persona | null;
     currentOffice: Office | null;
-    sessions: any[]; // Placeholder for session history
+    sessions: Photosession[]; // Placeholder for session history
 
     // Actions
     setPersona: (persona: Persona | null) => void;

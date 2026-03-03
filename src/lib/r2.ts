@@ -8,8 +8,8 @@ const r2Client = new S3Client({
         secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || "",
     },
     // R2 does not support checksum validation — newer AWS SDK adds it by default
-    requestChecksumCalculation: "WHEN_REQUIRED" as any,
-    responseChecksumValidation: "WHEN_REQUIRED" as any,
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
 });
 
 export { r2Client };

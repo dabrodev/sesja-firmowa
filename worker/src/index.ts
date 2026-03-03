@@ -25,6 +25,18 @@ type GenerateParams = {
 type WorkerUrl = "https://sesja-firmowa.damiandabrodev.workers.dev";
 const WORKER_URL: WorkerUrl = "https://sesja-firmowa.damiandabrodev.workers.dev";
 
+type GeminiPart =
+    | { text: string }
+    | { inlineData: { mimeType: string; data: string } };
+
+type AzureChatCompletionResponse = {
+    choices?: Array<{ message?: { content?: string } }>;
+};
+
+function getErrorMessage(error: unknown, fallback: string): string {
+    return error instanceof Error ? error.message : fallback;
+}
+
 const CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -94,7 +106,7 @@ export class GenerationWorkflow extends WorkflowEntrypoint<Env, GenerateParams> 
 
 // ─── HTTP Handler ─────────────────────────────────────────────────────────────
 
-export default {
+const workerHandler = {
     async fetch(request: Request, env: Env): Promise<Response> {
         const url = new URL(request.url);
 
@@ -163,8 +175,8 @@ export default {
                 return new Response(JSON.stringify({ instanceId: instance.id, status: "queued" }), {
                     status: 202, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
                 });
-            } catch (error: any) {
-                return new Response(JSON.stringify({ error: error.message }), {
+            } catch (error: unknown) {
+                return new Response(JSON.stringify({ error: getErrorMessage(error, "Failed to start generation workflow") }), {
                     status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
                 });
             }
@@ -176,7 +188,7 @@ export default {
                 return new Response("Method not allowed", { status: 405, headers: CORS_HEADERS });
             }
             try {
-                const body = await request.json() as { prompt: string; referenceKeys?: string[] };
+                const body = await request.json() as { prompt?: string; referenceKeys?: string[] };
                 const { prompt, referenceKeys } = body;
 
                 if (!prompt) {
@@ -197,7 +209,7 @@ export default {
                 // Append the requested 5:4 aspect ratio directive to the prompt
                 const finalPrompt = `${prompt}\n\n[Instruction: Create image in 5:4 aspect ratio]`;
 
-                const parts: any[] = [{ text: finalPrompt }];
+                const parts: GeminiPart[] = [{ text: finalPrompt }];
                 if (refImages.length > 0) {
                     parts.push({ text: `\nREFERENCE PHOTOS (${refImages.length} images):\nPlease use these images as a visual reference for the subject, style, or composition as described in the prompt.` });
                     for (const img of refImages) {
@@ -215,7 +227,7 @@ export default {
                     },
                 });
 
-                let base64Image = null;
+                let base64Image: string | null = null;
                 for (const part of response.candidates?.[0]?.content?.parts ?? []) {
                     if (part.inlineData?.data) {
                         base64Image = part.inlineData.data;
@@ -240,9 +252,9 @@ export default {
                 return new Response(JSON.stringify({ url: publicUrl, success: true }), {
                     status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
                 });
-            } catch (error: any) {
+            } catch (error: unknown) {
                 console.error("Custom generation error:", error);
-                return new Response(JSON.stringify({ error: error.message }), {
+                return new Response(JSON.stringify({ error: getErrorMessage(error, "Custom generation failed") }), {
                     status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
                 });
             }
@@ -273,8 +285,8 @@ export default {
                 }), {
                     headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
                 });
-            } catch (error: any) {
-                return new Response(JSON.stringify({ error: error.message }), {
+            } catch (error: unknown) {
+                return new Response(JSON.stringify({ error: getErrorMessage(error, "Status not found") }), {
                     status: 404, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
                 });
             }
@@ -285,6 +297,7 @@ export default {
         });
     },
 };
+export default workerHandler;
 
 // ─── Handle file uploads ──────────────────────────────────────────────────────
 
@@ -309,8 +322,8 @@ async function handleUpload(request: Request, env: Env): Promise<Response> {
         return new Response(JSON.stringify({ key, success: true }), {
             status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
         });
-    } catch (error: any) {
-        return new Response(JSON.stringify({ error: error.message || "Upload failed" }), {
+    } catch (error: unknown) {
+        return new Response(JSON.stringify({ error: getErrorMessage(error, "Upload failed") }), {
             status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
         });
     }
@@ -370,7 +383,7 @@ Generate ONLY the image prompt text. 2-3 sentences maximum.`;
         return getDefaultPrompt();
     }
 
-    const data = await resp.json() as any;
+    const data = await resp.json() as AzureChatCompletionResponse;
     return data.choices?.[0]?.message?.content || getDefaultPrompt();
 }
 
@@ -389,7 +402,7 @@ async function generateOneImage(
 ): Promise<string> {  // throws on failure — workflow will retry
     const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 
-    const parts: any[] = [];
+    const parts: GeminiPart[] = [];
 
     parts.push({
         text: `FACE REFERENCE PHOTOS (${faceImages.length} images):\nThese show the EXACT person to photograph. You MUST:\n- Preserve their face structure, skin tone, eye color, nose shape, jawline 100% accurately\n- Keep their hair color, length, and style EXACTLY as shown\n- Reproduce their clothing/outfit/style precisely — same colors, fabric, neckline`,
@@ -437,8 +450,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
     const chunk = 8192;
     let binary = "";
     for (let i = 0; i < bytes.length; i += chunk) {
-        // @ts-ignore
-        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+        binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
     }
     return btoa(binary);
 }

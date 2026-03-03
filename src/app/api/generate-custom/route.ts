@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 
+type GenerateCustomRequestBody = {
+    prompt: string;
+    referenceKeys?: string[];
+};
+
+function getErrorMessage(error: unknown, fallback: string): string {
+    return error instanceof Error ? error.message : fallback;
+}
+
 export async function POST(req: NextRequest) {
     try {
-        const body = await req.json() as { prompt: string; referenceKeys?: string[] };
+        const body = await req.json() as Partial<GenerateCustomRequestBody>;
         const { prompt, referenceKeys } = body;
 
         if (!prompt) {
@@ -31,8 +40,8 @@ export async function POST(req: NextRequest) {
         const result = await workerResp.json() as { url: string; success: boolean };
         return NextResponse.json(result, { status: 200 });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Generate Custom route error:", error);
-        return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+        return NextResponse.json({ error: getErrorMessage(error, "Internal Server Error") }, { status: 500 });
     }
 }

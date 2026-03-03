@@ -14,8 +14,10 @@ import { userService } from "@/lib/users";
 import { cn } from "@/lib/utils";
 import { CopyPlus } from "lucide-react";
 
+type WizardStepId = "face" | "office" | "generate";
+
 export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequested }: { sessionId?: string, onNewSessionRequested?: () => void }) {
-    const [step, setStep] = useState<"face" | "office" | "generate">("face");
+    const [step, setStep] = useState<WizardStepId>("face");
     const [isGenerating, setIsGenerating] = useState(false);
     const [hasCompleted, setHasCompleted] = useState(false);
     const [sessionId, setSessionId] = useState<string | null>(initialSessionId || null);
@@ -37,11 +39,15 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
     const faceAssets = currentPersona?.faceReferences || [];
     const officeAssets = currentOffice?.officeReferences || [];
 
-    const steps = [
+    const steps: { id: WizardStepId; label: string; icon: React.ReactNode; completed: boolean }[] = [
         { id: "face", label: "Wizerunek", icon: <User className="h-4 w-4" />, completed: faceAssets.length >= 1 },
         { id: "office", label: "Biuro", icon: <Building2 className="h-4 w-4" />, completed: officeAssets.length >= 1 },
         { id: "generate", label: "Generuj", icon: <Sparkles className="h-4 w-4" />, completed: hasCompleted }
     ];
+
+    if (!user) {
+        return null;
+    }
 
     return (
         <div className="mx-auto max-w-5xl space-y-8 py-12 px-4">
@@ -56,7 +62,7 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                             label={s.label}
                             onClick={() => {
                                 const prevCompleted = i === 0 || steps[i - 1].completed;
-                                if (prevCompleted || step === s.id) setStep(s.id as any);
+                                if (prevCompleted || step === s.id) setStep(s.id);
                             }}
                         />
                         {i < steps.length - 1 && (
@@ -88,7 +94,7 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                     onUpload={addFaceReference}
                                     onRemove={removeFaceReference}
                                     maxFiles={10}
-                                    userId={user?.uid!}
+                                    userId={user.uid}
                                     assetType="face"
                                 />
                                 <div className="flex justify-end">
@@ -118,7 +124,7 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                     onUpload={addOfficeReference}
                                     onRemove={removeOfficeReference}
                                     maxFiles={5}
-                                    userId={user?.uid!}
+                                    userId={user.uid}
                                     assetType="office"
                                 />
                                 <div className="flex justify-between">
@@ -251,11 +257,14 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
 
                                                                     if (data.status === "complete") {
                                                                         clearInterval(poll);
+                                                                        if (!id) {
+                                                                            throw new Error("Nie udało się zapisać sesji.");
+                                                                        }
                                                                         // Depending on logic, we append rather than overwrite
                                                                         if (sessionId) {
-                                                                            await sessionService.appendResults(id!, data.output?.resultUrls || []);
+                                                                            await sessionService.appendResults(id, data.output?.resultUrls || []);
                                                                         } else {
-                                                                            await sessionService.updateSession(id!, { results: data.output?.resultUrls || [], status: "completed" });
+                                                                            await sessionService.updateSession(id, { results: data.output?.resultUrls || [], status: "completed" });
                                                                         }
                                                                         setIsGenerating(false);
                                                                         resolve();
@@ -273,9 +282,9 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                             }, 3000);
                                                         });
 
-                                                    } catch (error: any) {
+                                                    } catch (error: unknown) {
                                                         console.error("Failed to generate:", error);
-                                                        alert("Błąd generowania: " + error.message);
+                                                        alert("Błąd generowania: " + (error instanceof Error ? error.message : "Nieznany błąd"));
                                                         setIsGenerating(false);
                                                     }
                                                 }}

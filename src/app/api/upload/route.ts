@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
+function getErrorMessage(error: unknown, fallback: string): string {
+    return error instanceof Error ? error.message : fallback;
+}
+
 export async function POST(req: NextRequest) {
     try {
         const formData = await req.formData();
@@ -36,8 +40,8 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({ viewUrl, key });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Upload route error:", error);
-        return NextResponse.json({ error: error.message || "Upload failed" }, { status: 500 });
+        return NextResponse.json({ error: getErrorMessage(error, "Upload failed") }, { status: 500 });
     }
 }

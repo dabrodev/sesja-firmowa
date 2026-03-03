@@ -4,7 +4,7 @@ import React, { useEffect } from "react";
 import { motion } from "framer-motion";
 import { SessionWizard } from "@/components/session-wizard";
 import { BetaGuard } from "@/components/beta-guard";
-import { Camera, Sparkles, UserCheck, Zap, ArrowRight, Home, Coins } from "lucide-react";
+import { Camera, Sparkles, Home, Coins } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/components/auth-provider";
 import { useRouter } from "next/navigation";
@@ -127,7 +127,7 @@ export default function App() {
                                     </DropdownMenuLabel>
                                     <DropdownMenuSeparator className="bg-white/10" />
                                     <DropdownMenuItem className="focus:bg-white/5 focus:text-white cursor-pointer" asChild>
-                                        <Link href="/projekty">moje projekty</Link>
+                                        <Link href="/sesje">moje sesje</Link>
                                     </DropdownMenuItem>
                                     <DropdownMenuItem className="focus:bg-white/5 focus:text-white cursor-pointer">
                                         ustawienia
@@ -150,6 +150,11 @@ export default function App() {
                                 Zaloguj
                             </Button>
                         )}
+                        <Link href="/sesje">
+                            <Button variant="outline" className="border-white/10 bg-white/5 text-white hover:bg-white/10 hidden sm:flex">
+                                moje sesje
+                            </Button>
+                        </Link>
                         <Link href="/">
                             <Button variant="outline" className="border-white/10 bg-white/5 text-white hover:bg-white/10 hidden sm:flex">
                                 <Home className="mr-2 h-4 w-4" /> powrót
