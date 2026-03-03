@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { assetService, UserAsset } from "@/lib/assets";
-import { AssetType } from "@/lib/store";
+import { AssetType, useAppStore } from "@/lib/store";
 import { Camera, Coins, Loader2, Sparkles, Trash2, Images, CheckSquare, Square } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ImageWithPlaceholder } from "@/components/image-with-placeholder";
+import { sessionService } from "@/lib/sessions";
 
 type AssetFilter = "all" | AssetType;
 
@@ -27,6 +28,7 @@ const TYPE_LABELS: Record<AssetType, string> = {
 
 export default function MaterialsPage() {
     const { user, userProfile, loading: authLoading } = useAuth();
+    const { removeFaceReference, removeOfficeReference, removeOutfitReference } = useAppStore();
     const router = useRouter();
     const [assets, setAssets] = useState<UserAsset[]>([]);
     const [loading, setLoading] = useState(true);
@@ -101,14 +103,26 @@ export default function MaterialsPage() {
 
         try {
             const deletedDocIds = new Set<string>();
+            const deletedReferences: string[] = [];
+            const deletedAssets: UserAsset[] = [];
             let failures = 0;
 
             for (const asset of targets) {
                 try {
                     await assetService.deleteAsset(asset.docId, asset.url);
                     deletedDocIds.add(asset.docId);
+                    deletedReferences.push(asset.url);
+                    deletedAssets.push(asset);
                 } catch {
                     failures++;
+                }
+            }
+
+            if (deletedReferences.length > 0 && user) {
+                try {
+                    await sessionService.removeReferencesFromAllUserSessions(user.uid, deletedReferences);
+                } catch (error) {
+                    console.warn("Failed to cleanup session references after asset deletion:", error);
                 }
             }
 
@@ -119,6 +133,16 @@ export default function MaterialsPage() {
                     for (const docId of deletedDocIds) next.delete(docId);
                     return next;
                 });
+
+                for (const asset of deletedAssets) {
+                    if (asset.type === "face") {
+                        removeFaceReference(asset.id);
+                    } else if (asset.type === "office") {
+                        removeOfficeReference(asset.id);
+                    } else {
+                        removeOutfitReference(asset.id);
+                    }
+                }
             }
 
             if (failures > 0) {

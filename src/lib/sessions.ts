@@ -224,6 +224,40 @@ export const sessionService = {
         }
     },
 
+    async removeReferencesFromAllUserSessions(userId: string, references: string[]) {
+        try {
+            const uniqueReferences = Array.from(
+                new Set(references.map((reference) => reference.trim()).filter((reference) => reference.length > 0))
+            );
+            if (uniqueReferences.length === 0) {
+                return;
+            }
+
+            const q = query(
+                collection(db, "sessions"),
+                where("userId", "==", userId)
+            );
+            const querySnapshot = await getDocs(q);
+            if (querySnapshot.empty) return;
+
+            const { arrayRemove } = await import("firebase/firestore");
+            await Promise.all(
+                querySnapshot.docs.map(async (sessionDoc) => {
+                    const sessionRef = doc(db, "sessions", sessionDoc.id);
+                    await updateDoc(sessionRef, {
+                        faceReferences: arrayRemove(...uniqueReferences),
+                        officeReferences: arrayRemove(...uniqueReferences),
+                        outfitReferences: arrayRemove(...uniqueReferences),
+                        updatedAt: serverTimestamp(),
+                    });
+                })
+            );
+        } catch (error) {
+            console.error("Error removing references from user sessions:", error);
+            throw error;
+        }
+    },
+
     async getUserSessions(userId: string) {
         try {
             const q = query(
