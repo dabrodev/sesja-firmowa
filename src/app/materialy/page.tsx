@@ -123,6 +123,7 @@ export default function MaterialsPage() {
                     await sessionService.removeReferencesFromAllUserSessions(user.uid, deletedReferences);
                 } catch (error) {
                     console.warn("Failed to cleanup session references after asset deletion:", error);
+                    alert("Zdjęcie usunięte, ale nie udało się od razu odświeżyć wszystkich sesji. Odśwież stronę sesji.");
                 }
             }
 

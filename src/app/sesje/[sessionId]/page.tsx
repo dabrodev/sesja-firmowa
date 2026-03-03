@@ -32,6 +32,7 @@ import type { PhotoAsset } from "@/lib/store";
 import { extractR2KeyFromReference, referenceUrlToPhotoAsset } from "@/lib/reference-assets";
 import { ImageWithPlaceholder } from "@/components/image-with-placeholder";
 import { downloadFile } from "@/lib/download";
+import { assetService } from "@/lib/assets";
 
 export default function SessionDetailsPage({ params }: { params: Promise<{ sessionId: string }> }) {
     const { sessionId } = use(params);
@@ -219,8 +220,35 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                         router.push(`/sesje`);
                         return;
                     }
-                    setSession(data);
-                    resetReferenceDraft(data);
+                    const userAssets = await assetService.getAllUserAssets(user.uid);
+                    const validReferences = new Set(userAssets.map((asset) => asset.url));
+                    const sanitizedFaceReferences = data.faceReferences.filter((reference) => validReferences.has(reference));
+                    const sanitizedOfficeReferences = data.officeReferences.filter((reference) => validReferences.has(reference));
+                    const sanitizedOutfitReferences = data.outfitReferences.filter((reference) => validReferences.has(reference));
+                    const hasReferenceMismatch =
+                        sanitizedFaceReferences.length !== data.faceReferences.length ||
+                        sanitizedOfficeReferences.length !== data.officeReferences.length ||
+                        sanitizedOutfitReferences.length !== data.outfitReferences.length;
+
+                    const sanitizedData: Photosession = hasReferenceMismatch
+                        ? {
+                            ...data,
+                            faceReferences: sanitizedFaceReferences,
+                            officeReferences: sanitizedOfficeReferences,
+                            outfitReferences: sanitizedOutfitReferences,
+                        }
+                        : data;
+
+                    if (hasReferenceMismatch && sanitizedData.id) {
+                        await sessionService.updateSession(sanitizedData.id, {
+                            faceReferences: sanitizedFaceReferences,
+                            officeReferences: sanitizedOfficeReferences,
+                            outfitReferences: sanitizedOutfitReferences,
+                        });
+                    }
+
+                    setSession(sanitizedData);
+                    resetReferenceDraft(sanitizedData);
                 } catch (error) {
                     console.error("Error fetching session:", error);
                     router.push(`/sesje`);

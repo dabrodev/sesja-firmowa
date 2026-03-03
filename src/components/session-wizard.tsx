@@ -19,6 +19,7 @@ import { GenerationResults } from "@/components/generation-results";
 import { useAuth } from "@/components/auth-provider";
 import { sessionService, Photosession, PromptRunTrace } from "@/lib/sessions";
 import { userService } from "@/lib/users";
+import { assetService } from "@/lib/assets";
 import { cn } from "@/lib/utils";
 import { CopyPlus } from "lucide-react";
 import { referenceUrlToPhotoAsset } from "@/lib/reference-assets";
@@ -93,20 +94,47 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
     } = useAppStore();
 
     useEffect(() => {
-        if (initialSessionId) {
+        if (initialSessionId && user) {
             setSessionId(initialSessionId);
-            sessionService.getSessionById(initialSessionId).then(data => {
-                if (!data) return;
+            void sessionService.getSessionById(initialSessionId).then(async (data) => {
+                if (!data || data.userId !== user.uid) return;
 
-                setSessionData(data);
+                const userAssets = await assetService.getAllUserAssets(user.uid);
+                const validReferences = new Set(userAssets.map((asset) => asset.url));
+                const sanitizedFaceReferences = data.faceReferences.filter((reference) => validReferences.has(reference));
+                const sanitizedOfficeReferences = data.officeReferences.filter((reference) => validReferences.has(reference));
+                const sanitizedOutfitReferences = data.outfitReferences.filter((reference) => validReferences.has(reference));
+                const hasReferenceMismatch =
+                    sanitizedFaceReferences.length !== data.faceReferences.length ||
+                    sanitizedOfficeReferences.length !== data.officeReferences.length ||
+                    sanitizedOutfitReferences.length !== data.outfitReferences.length;
 
-                const sessionFaceAssets = data.faceReferences.map((reference, index) =>
+                const sanitizedData: Photosession = hasReferenceMismatch
+                    ? {
+                        ...data,
+                        faceReferences: sanitizedFaceReferences,
+                        officeReferences: sanitizedOfficeReferences,
+                        outfitReferences: sanitizedOutfitReferences,
+                    }
+                    : data;
+
+                if (hasReferenceMismatch && sanitizedData.id) {
+                    await sessionService.updateSession(sanitizedData.id, {
+                        faceReferences: sanitizedFaceReferences,
+                        officeReferences: sanitizedOfficeReferences,
+                        outfitReferences: sanitizedOutfitReferences,
+                    });
+                }
+
+                setSessionData(sanitizedData);
+
+                const sessionFaceAssets = sanitizedData.faceReferences.map((reference, index) =>
                     referenceUrlToPhotoAsset(reference, index, "face")
                 );
-                const sessionOfficeAssets = data.officeReferences.slice(0, 1).map((reference, index) =>
+                const sessionOfficeAssets = sanitizedData.officeReferences.slice(0, 1).map((reference, index) =>
                     referenceUrlToPhotoAsset(reference, index, "office")
                 );
-                const sessionOutfitAssets = data.outfitReferences.map((reference, index) =>
+                const sessionOutfitAssets = sanitizedData.outfitReferences.map((reference, index) =>
                     referenceUrlToPhotoAsset(reference, index, "outfit")
                 );
 
@@ -125,8 +153,8 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                     name: "Outfit References",
                     outfitReferences: sessionOutfitAssets,
                 });
-                setCustomPrompt(data.customPrompt);
-                setRequestedCount(data.requestedCount);
+                setCustomPrompt(sanitizedData.customPrompt);
+                setRequestedCount(sanitizedData.requestedCount);
             });
         } else {
             setSessionId(null);
@@ -134,7 +162,7 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
             setCustomPrompt("");
             setRequestedCount(4);
         }
-    }, [initialSessionId, setOffice, setOutfit, setPersona]);
+    }, [initialSessionId, user, setOffice, setOutfit, setPersona]);
 
     const faceAssets = currentPersona?.faceReferences || [];
     const officeAssets = currentOffice?.officeReferences || [];
