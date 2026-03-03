@@ -37,6 +37,68 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
     const [customPromptDraft, setCustomPromptDraft] = useState("");
     const [requestedCountDraft, setRequestedCountDraft] = useState(4);
 
+    useEffect(() => {
+        if (!session?.id || !user || session.status !== "processing") {
+            return;
+        }
+        const activeSessionId = session.id;
+
+        let cancelled = false;
+
+        const syncSessionFromWorkflow = async () => {
+            try {
+                const response = await fetch(
+                    `/api/status?instanceId=${encodeURIComponent(activeSessionId)}`,
+                    { cache: "no-store" }
+                );
+                if (!response.ok) return;
+
+                const data = await response.json() as {
+                    status: "queued" | "running" | "complete" | "errored" | "terminated";
+                    output?: { resultUrls?: string[] };
+                };
+                if (cancelled) return;
+
+                if (data.status === "complete") {
+                    const workflowResults = data.output?.resultUrls ?? [];
+                    const mergedResults = Array.from(new Set([...(session.results || []), ...workflowResults]));
+
+                    await sessionService.updateSession(activeSessionId, {
+                        status: "completed",
+                        results: mergedResults,
+                    });
+
+                    if (!cancelled) {
+                        setSession((prev) => {
+                            if (!prev) return prev;
+                            return { ...prev, status: "completed", results: mergedResults };
+                        });
+                    }
+                    return;
+                }
+
+                if (data.status === "errored" || data.status === "terminated") {
+                    await sessionService.updateSession(activeSessionId, { status: "failed" });
+                    if (!cancelled) {
+                        setSession((prev) => (prev ? { ...prev, status: "failed" } : prev));
+                    }
+                }
+            } catch (error) {
+                console.warn("Workflow sync failed:", error);
+            }
+        };
+
+        void syncSessionFromWorkflow();
+        const interval = setInterval(() => {
+            void syncSessionFromWorkflow();
+        }, 5000);
+
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+        };
+    }, [session?.id, session?.status, session?.results, user]);
+
     const resetReferenceDraft = useCallback((sessionData: Photosession) => {
         setFaceReferencesDraft(
             sessionData.faceReferences.map((reference, index) => referenceUrlToPhotoAsset(reference, index, "face"))
