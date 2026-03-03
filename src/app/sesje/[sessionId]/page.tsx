@@ -31,6 +31,7 @@ import { PhotoUploader } from "@/components/photo-uploader";
 import type { PhotoAsset } from "@/lib/store";
 import { referenceUrlToPhotoAsset } from "@/lib/reference-assets";
 import { ImageWithPlaceholder } from "@/components/image-with-placeholder";
+import { downloadFile } from "@/lib/download";
 
 export default function SessionDetailsPage({ params }: { params: Promise<{ sessionId: string }> }) {
     const { sessionId } = use(params);
@@ -245,20 +246,10 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
 
     const handleDownload = async (url: string, index: number) => {
         try {
-            const response = await fetch(url);
-            const blob = await response.blob();
-            const blobUrl = window.URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = blobUrl;
-            a.download = `sesja-${session?.id}-photo-${index + 1}.jpg`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(blobUrl);
+            await downloadFile(url, `sesja-${session?.id}-photo-${index + 1}.jpg`);
         } catch (error) {
             console.error("Error downloading image:", error);
-            // Fallback opening in new tab
-            window.open(url, "_blank");
+            alert("Nie udało się pobrać zdjęcia. Spróbuj ponownie za chwilę.");
         }
     };
 

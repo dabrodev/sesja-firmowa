@@ -6,6 +6,7 @@ import { Download, Share2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAppStore } from "@/lib/store";
 import { useRouter } from "next/navigation";
+import { downloadFile } from "@/lib/download";
 
 interface GenerationResultsProps {
     sessionId?: string | null;
@@ -17,6 +18,16 @@ export function GenerationResults({ sessionId, resultUrls = [], expectedCount = 
     const { resetSession } = useAppStore();
     const router = useRouter();
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
+
+    const handleDownload = async (url: string, index: number) => {
+        try {
+            const baseName = sessionId ? `sesja-${sessionId}` : "sesja";
+            await downloadFile(url, `${baseName}-photo-${index + 1}.jpg`);
+        } catch (error) {
+            console.error("Error downloading image:", error);
+            alert("Nie udało się pobrać zdjęcia. Spróbuj ponownie za chwilę.");
+        }
+    };
 
     return (
         <div className="space-y-8 animate-in fade-in duration-700">
@@ -67,11 +78,17 @@ export function GenerationResults({ sessionId, resultUrls = [], expectedCount = 
                                 }}
                             />
                             <div className="absolute inset-0 bg-black/60 opacity-0 transition-opacity group-hover:opacity-100 flex items-center justify-center gap-4">
-                                <a href={url} download={`sesja-${i + 1}.jpg`} onClick={(e) => e.stopPropagation()}>
-                                    <Button size="icon" variant="secondary" className="rounded-full">
-                                        <Download className="h-5 w-5" />
-                                    </Button>
-                                </a>
+                                <Button
+                                    size="icon"
+                                    variant="secondary"
+                                    className="rounded-full"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        void handleDownload(url, i);
+                                    }}
+                                >
+                                    <Download className="h-5 w-5" />
+                                </Button>
                                 <Button size="icon" variant="secondary" className="rounded-full" onClick={(e) => e.stopPropagation()}>
                                     <Share2 className="h-5 w-5" />
                                 </Button>

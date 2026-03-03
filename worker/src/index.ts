@@ -264,6 +264,7 @@ const workerHandler = {
         // Serve files from R2 binding
         if (url.pathname === "/file") {
             const key = url.searchParams.get("key");
+            const shouldDownload = url.searchParams.get("download") === "1";
             if (!key) {
                 return new Response(JSON.stringify({ error: "Missing key" }), {
                     status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
@@ -274,11 +275,13 @@ const workerHandler = {
                 return new Response("Not found", { status: 404, headers: CORS_HEADERS });
             }
             const contentType = object.httpMetadata?.contentType || "image/jpeg";
+            const filename = key.split("/").pop() || "image.jpg";
             return new Response(object.body, {
                 headers: {
                     ...CORS_HEADERS,
                     "Content-Type": contentType,
                     "Cache-Control": "public, max-age=86400",
+                    ...(shouldDownload ? { "Content-Disposition": `attachment; filename="${filename}"` } : {}),
                 },
             });
         }
