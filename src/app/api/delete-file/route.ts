@@ -17,8 +17,8 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Missing key" }, { status: 400 });
         }
 
-        // Gallery assets are expected under uploads/*.
-        if (!key.startsWith("uploads/")) {
+        // Deletion is allowed for user uploads and generated session results.
+        if (!key.startsWith("uploads/") && !key.startsWith("results/")) {
             return NextResponse.json({ error: "Invalid key prefix" }, { status: 400 });
         }
 
@@ -47,4 +47,3 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: getErrorMessage(error, "Delete failed") }, { status: 500 });
     }
 }
-

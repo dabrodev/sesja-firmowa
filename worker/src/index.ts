@@ -579,8 +579,8 @@ async function handleDeleteFile(request: Request, env: Env): Promise<Response> {
             });
         }
 
-        // Only allow deleting uploaded user assets.
-        if (!key.startsWith("uploads/")) {
+        // Only allow deleting uploaded user assets and generated result files.
+        if (!key.startsWith("uploads/") && !key.startsWith("results/")) {
             return new Response(JSON.stringify({ error: "Invalid key prefix" }), {
                 status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
             });

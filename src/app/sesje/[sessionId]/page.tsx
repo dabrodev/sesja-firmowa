@@ -3,7 +3,7 @@
 import { useEffect, useState, use, useCallback } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { sessionService, Photosession, PromptRunTrace } from "@/lib/sessions";
-import { Camera, Calendar, ArrowLeft, Loader2, Download, ExternalLink, ImageIcon, PencilLine, Save, X } from "lucide-react";
+import { Camera, Calendar, ArrowLeft, Loader2, Download, ExternalLink, ImageIcon, PencilLine, Save, X, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -29,7 +29,7 @@ import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { PhotoUploader } from "@/components/photo-uploader";
 import type { PhotoAsset } from "@/lib/store";
-import { referenceUrlToPhotoAsset } from "@/lib/reference-assets";
+import { extractR2KeyFromReference, referenceUrlToPhotoAsset } from "@/lib/reference-assets";
 import { ImageWithPlaceholder } from "@/components/image-with-placeholder";
 import { downloadFile } from "@/lib/download";
 
@@ -48,6 +48,34 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
     const [requestedCountDraft, setRequestedCountDraft] = useState(4);
     const [isSyncingResults, setIsSyncingResults] = useState(false);
     const [currentRunGeneratedCount, setCurrentRunGeneratedCount] = useState(0);
+    const [deletingResultIndex, setDeletingResultIndex] = useState<number | null>(null);
+    const [isDeletingSession, setIsDeletingSession] = useState(false);
+
+    const parseDeleteError = useCallback((error: unknown): string => {
+        if (error instanceof Error && error.message) return error.message;
+        if (typeof error === "string" && error.trim().length > 0) return error;
+        return "Nie udało się usunąć zasobu.";
+    }, []);
+
+    const deleteR2ByReference = useCallback(async (reference: string) => {
+        const key = extractR2KeyFromReference(reference);
+        if (!key) return;
+
+        const response = await fetch("/api/delete-file", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ key }),
+        });
+
+        if (!response.ok) {
+            try {
+                const data = await response.json() as { error?: string };
+                throw new Error(data.error || "Nie udało się usunąć pliku z chmury.");
+            } catch {
+                throw new Error("Nie udało się usunąć pliku z chmury.");
+            }
+        }
+    }, []);
 
     useEffect(() => {
         const shouldSyncWorkflow =
@@ -262,6 +290,61 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
         }
     };
 
+    const handleDeleteResult = async (index: number) => {
+        if (!session?.id || !session.results[index]) return;
+        if (session.status === "processing") {
+            alert("Nie można usuwać zdjęć w trakcie aktywnego generowania.");
+            return;
+        }
+
+        const confirmed = confirm("Usunąć to zdjęcie z sesji? Plik zostanie usunięty również z Cloudflare R2.");
+        if (!confirmed) return;
+
+        const targetUrl = session.results[index];
+        setDeletingResultIndex(index);
+        try {
+            await deleteR2ByReference(targetUrl);
+            const nextResults = session.results.filter((_, resultIndex) => resultIndex !== index);
+            await sessionService.updateSession(session.id, { results: nextResults });
+            setSession((prev) => (prev ? { ...prev, results: nextResults } : prev));
+        } catch (error) {
+            console.error("Error deleting session result:", error);
+            alert(parseDeleteError(error));
+        } finally {
+            setDeletingResultIndex(null);
+        }
+    };
+
+    const handleDeleteSession = async () => {
+        if (!session?.id) return;
+        if (session.status === "processing") {
+            alert("Nie można usunąć sesji w trakcie aktywnego generowania.");
+            return;
+        }
+
+        const confirmed = confirm("Usunąć całą sesję? Wszystkie wygenerowane zdjęcia zostaną usunięte także z Cloudflare R2.");
+        if (!confirmed) return;
+
+        setIsDeletingSession(true);
+        try {
+            for (const url of session.results) {
+                try {
+                    await deleteR2ByReference(url);
+                } catch (error) {
+                    console.warn("Failed to delete result from R2:", error);
+                }
+            }
+
+            await sessionService.deleteSession(session.id);
+            router.push("/sesje");
+        } catch (error) {
+            console.error("Error deleting session:", error);
+            alert(parseDeleteError(error));
+        } finally {
+            setIsDeletingSession(false);
+        }
+    };
+
     if (authLoading || loading) {
         return (
             <div className="flex min-h-screen items-center justify-center bg-[#020617]">
@@ -369,11 +452,22 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                         <p className="text-zinc-500 text-sm mt-1 font-mono">ID: {session.id}</p>
                     </div>
                     <div className="flex-shrink-0">
-                        <Link href={`/generator?sessionId=${session.id}`}>
-                            <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-lg shadow-blue-500/20">
-                                Kontynuuj sesję (+{session.requestedCount} zdjęć)
+                        <div className="flex flex-wrap gap-2">
+                            <Link href={`/generator?sessionId=${session.id}`}>
+                                <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-lg shadow-blue-500/20">
+                                    Kontynuuj sesję (+{session.requestedCount} zdjęć)
+                                </Button>
+                            </Link>
+                            <Button
+                                variant="outline"
+                                className="border-red-500/40 bg-red-500/10 text-red-200 hover:bg-red-500/20 hover:text-red-100"
+                                onClick={() => void handleDeleteSession()}
+                                disabled={isDeletingSession || session.status === "processing"}
+                            >
+                                {isDeletingSession ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                                Usuń sesję
                             </Button>
-                        </Link>
+                        </div>
                     </div>
                 </div>
 
@@ -458,6 +552,19 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                                     onClick={() => window.open(url, "_blank")}
                                                 >
                                                     <ExternalLink className="h-4 w-4" />
+                                                </Button>
+                                                <Button
+                                                    variant="secondary"
+                                                    size="icon"
+                                                    className="bg-red-600/80 hover:bg-red-500 text-white backdrop-blur-md"
+                                                    onClick={() => void handleDeleteResult(i)}
+                                                    disabled={deletingResultIndex === i || session.status === "processing" || isDeletingSession}
+                                                >
+                                                    {deletingResultIndex === i ? (
+                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                    ) : (
+                                                        <Trash2 className="h-4 w-4" />
+                                                    )}
                                                 </Button>
                                             </div>
                                         </div>
