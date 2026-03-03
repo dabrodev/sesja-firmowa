@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { sessionService, Photosession } from "@/lib/sessions";
-import { Camera, Calendar, ArrowRight, Loader2, Coins, Plus, Sparkles, Image as ImageIcon } from "lucide-react";
+import { Camera, Calendar, ArrowRight, Loader2, Coins, Plus, Sparkles, Image as ImageIcon, Clock3 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ export default function SessionsPage() {
     const router = useRouter();
     const [sessions, setSessions] = useState<Photosession[]>([]);
     const [loading, setLoading] = useState(true);
+    const [runProgress, setRunProgress] = useState<Record<string, number>>({});
 
     const fetchData = useCallback(async () => {
         if (!user) return;
@@ -56,6 +57,123 @@ export default function SessionsPage() {
 
         return () => clearTimeout(timer);
     }, [user, authLoading, router, fetchData]);
+
+    useEffect(() => {
+        if (!user || sessions.length === 0) return;
+        const processingSessions = sessions.filter((session) => session.status === "processing" && session.id);
+        if (processingSessions.length === 0) return;
+
+        let cancelled = false;
+
+        const syncSession = async (processingSession: Photosession) => {
+            if (!processingSession.id) return;
+            const workflowInstanceId = processingSession.activeWorkflowInstanceId || processingSession.id;
+            const workflowRunId = processingSession.activeWorkflowRunId || null;
+
+            try {
+                const response = await fetch(
+                    `/api/status?instanceId=${encodeURIComponent(workflowInstanceId)}&sessionId=${encodeURIComponent(processingSession.id)}${workflowRunId ? `&runId=${encodeURIComponent(workflowRunId)}` : ""}`,
+                    { cache: "no-store" }
+                );
+                if (!response.ok || cancelled) return;
+
+                const data = await response.json() as {
+                    status: "queued" | "running" | "complete" | "errored" | "terminated";
+                    output?: { resultUrls?: string[] };
+                };
+                if (cancelled) return;
+
+                const workflowResults = data.output?.resultUrls ?? [];
+                setRunProgress((prev) => {
+                    const current = prev[processingSession.id!] ?? 0;
+                    if (current === workflowResults.length) return prev;
+                    return { ...prev, [processingSession.id!]: workflowResults.length };
+                });
+
+                const mergedResults = workflowResults.length > 0
+                    ? Array.from(new Set([...(processingSession.results || []), ...workflowResults]))
+                    : (processingSession.results || []);
+                const hasNewResults = mergedResults.length !== (processingSession.results?.length || 0);
+
+                if (data.status === "complete") {
+                    await sessionService.updateSession(processingSession.id, {
+                        status: "completed",
+                        results: mergedResults,
+                        activeWorkflowInstanceId: null,
+                        activeWorkflowRunId: null,
+                    });
+                    if (!cancelled) {
+                        setSessions((prev) =>
+                            prev.map((session) =>
+                                session.id === processingSession.id
+                                    ? {
+                                        ...session,
+                                        status: "completed",
+                                        results: mergedResults,
+                                        activeWorkflowInstanceId: null,
+                                        activeWorkflowRunId: null,
+                                    }
+                                    : session
+                            )
+                        );
+                    }
+                    return;
+                }
+
+                if (data.status === "errored" || data.status === "terminated") {
+                    await sessionService.updateSession(processingSession.id, {
+                        status: "failed",
+                        activeWorkflowInstanceId: null,
+                        activeWorkflowRunId: null,
+                    });
+                    if (!cancelled) {
+                        setSessions((prev) =>
+                            prev.map((session) =>
+                                session.id === processingSession.id
+                                    ? { ...session, status: "failed", activeWorkflowInstanceId: null, activeWorkflowRunId: null }
+                                    : session
+                            )
+                        );
+                    }
+                    return;
+                }
+
+                if (hasNewResults) {
+                    await sessionService.updateSession(processingSession.id, {
+                        status: "processing",
+                        results: mergedResults,
+                    });
+                    if (!cancelled) {
+                        setSessions((prev) =>
+                            prev.map((session) =>
+                                session.id === processingSession.id
+                                    ? { ...session, status: "processing", results: mergedResults }
+                                    : session
+                            )
+                        );
+                    }
+                }
+            } catch (error) {
+                console.warn("Failed to sync processing session:", error);
+            }
+        };
+
+        const syncAll = async () => {
+            await Promise.all(processingSessions.map(syncSession));
+        };
+
+        void syncAll();
+        const interval = setInterval(() => {
+            void syncAll();
+        }, 5000);
+
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+        };
+    }, [user, sessions]);
+
+    const activeGeneratingSessions = sessions.filter((session) => session.status === "processing" && session.id);
 
     if (authLoading || loading) {
         return (
@@ -175,6 +293,48 @@ export default function SessionsPage() {
                     </div>
                 </div>
 
+                {activeGeneratingSessions.length > 0 ? (
+                    <Card className="mb-8 border-blue-500/20 bg-blue-500/10">
+                        <CardContent className="p-5 space-y-4">
+                            <div className="flex items-center gap-2 text-blue-100">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <h2 className="font-semibold">Aktywne generowanie sesji</h2>
+                            </div>
+                            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                {activeGeneratingSessions.map((session) => {
+                                    const generatedCount = session.id ? (runProgress[session.id] ?? 0) : 0;
+                                    const expectedCount = Math.max(1, session.requestedCount);
+                                    const progressPercent = Math.min(100, Math.round((generatedCount / expectedCount) * 100));
+
+                                    return (
+                                        <div key={`active-${session.id}`} className="rounded-xl border border-blue-400/20 bg-black/20 p-4">
+                                            <div className="flex items-center justify-between gap-3">
+                                                <div>
+                                                    <p className="text-sm font-medium text-white">{session.name}</p>
+                                                    <p className="text-xs text-zinc-300 mt-1">
+                                                        Wygenerowano {generatedCount}/{expectedCount} zdjęć
+                                                    </p>
+                                                </div>
+                                                <Link href={`/sesje/${session.id}`}>
+                                                    <Button size="sm" className="bg-blue-600 hover:bg-blue-500 text-white">
+                                                        Wróć do sesji
+                                                    </Button>
+                                                </Link>
+                                            </div>
+                                            <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                                                <div
+                                                    className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-500"
+                                                    style={{ width: `${progressPercent}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </CardContent>
+                    </Card>
+                ) : null}
+
                 {sessions.length === 0 ? (
                     <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-white/10 bg-white/5 p-20 text-center">
                         <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-white/5">
@@ -211,10 +371,21 @@ export default function SessionsPage() {
                                                 <Calendar className="h-3 w-3" />
                                                 {session.createdAt?.toDate().toLocaleDateString('pl-PL')}
                                             </div>
-                                            <span className="text-xs font-semibold uppercase tracking-wider text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20 flex items-center gap-1">
-                                                <ImageIcon className="w-3 h-3" /> {session.results?.length || 0} zdjęć
-                                            </span>
+                                            {session.status === "processing" ? (
+                                                <span className="text-xs font-semibold uppercase tracking-wider text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20 flex items-center gap-1">
+                                                    <Clock3 className="w-3 h-3" /> trwa generowanie
+                                                </span>
+                                            ) : (
+                                                <span className="text-xs font-semibold uppercase tracking-wider text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20 flex items-center gap-1">
+                                                    <ImageIcon className="w-3 h-3" /> {session.results?.length || 0} zdjęć
+                                                </span>
+                                            )}
                                         </div>
+                                        {session.status === "processing" ? (
+                                            <p className="mt-2 text-xs text-amber-100/90">
+                                                Postęp: {session.id ? (runProgress[session.id] ?? 0) : 0}/{Math.max(1, session.requestedCount)} zdjęć
+                                            </p>
+                                        ) : null}
                                     </div>
                                 </div>
                                 <CardContent className="p-4 bg-zinc-900/50 border-t border-white/5">

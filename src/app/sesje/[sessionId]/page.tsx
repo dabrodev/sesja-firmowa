@@ -47,9 +47,12 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
     const [customPromptDraft, setCustomPromptDraft] = useState("");
     const [requestedCountDraft, setRequestedCountDraft] = useState(4);
     const [isSyncingResults, setIsSyncingResults] = useState(false);
+    const [currentRunGeneratedCount, setCurrentRunGeneratedCount] = useState(0);
 
     useEffect(() => {
-        if (!session?.id || !user || session.results.length > 0 || session.status === "failed") {
+        const shouldSyncWorkflow =
+            session?.status === "processing" || Boolean(session?.activeWorkflowInstanceId);
+        if (!session?.id || !user || !shouldSyncWorkflow || session.status === "failed") {
             return;
         }
         const activeSessionId = session.id;
@@ -74,6 +77,9 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                 };
                 if (cancelled) return;
 
+                const workflowResults = data.output?.resultUrls ?? [];
+                setCurrentRunGeneratedCount(workflowResults.length);
+
                 const promptDebug = data.output?.promptDebug;
                 if (promptDebug) {
                     const alreadySaved = session.promptRuns.some((run) => run.runId === promptDebug.runId);
@@ -89,7 +95,6 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                     }
                 }
 
-                const workflowResults = data.output?.resultUrls ?? [];
                 if (workflowResults.length > 0) {
                     const mergedResults = Array.from(new Set([...(session.results || []), ...workflowResults]));
                     const targetStatus = data.status === "complete" ? "completed" : "processing";
@@ -117,7 +122,10 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                             });
                         }
                     }
-                    if (data.status === "complete") return;
+                    if (data.status === "complete") {
+                        setCurrentRunGeneratedCount(0);
+                        return;
+                    }
                 }
 
                 if (data.status === "errored" || data.status === "terminated") {
@@ -133,6 +141,7 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                 : prev
                         );
                     }
+                    setCurrentRunGeneratedCount(0);
                 }
             } catch (error) {
                 console.warn("Workflow sync failed:", error);
@@ -276,6 +285,14 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                 ? "Sprawdzamy workflow i pobieramy gotowe zdjęcia do tej sesji..."
                 : "To może potrwać kilka minut. Odśwież stronę za moment, aby sprawdzić wyniki.";
     const latestPromptRun = session.promptRuns[0] ?? null;
+    const isProcessing = session.status === "processing";
+    const expectedCurrentRunCount = isProcessing ? Math.max(1, session.requestedCount) : 0;
+    const missingCurrentRunCount = isProcessing
+        ? Math.max(expectedCurrentRunCount - currentRunGeneratedCount, 0)
+        : 0;
+    const currentRunProgressPercent = expectedCurrentRunCount
+        ? Math.min(100, Math.round((currentRunGeneratedCount / expectedCurrentRunCount) * 100))
+        : 0;
 
     return (
         <div className="min-h-screen bg-[#020617] text-white selection:bg-blue-500/30 font-sans pb-20">
@@ -368,7 +385,35 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                             Wygenerowane Fotografie
                         </h2>
 
-                        {session.results.length === 0 ? (
+                        {isProcessing ? (
+                            <Card className="border-blue-500/20 bg-blue-500/10">
+                                <CardContent className="p-5 space-y-3">
+                                    <div className="flex items-center gap-2 text-sm text-blue-100">
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        <span className="font-medium">Sesja aktywna: trwa generowanie</span>
+                                    </div>
+                                    <p className="text-sm text-zinc-200">
+                                        W tej kontynuacji wygenerowano już
+                                        {" "}
+                                        <span className="font-semibold text-white">{currentRunGeneratedCount}</span>
+                                        {" "}
+                                        z
+                                        {" "}
+                                        <span className="font-semibold text-white">{expectedCurrentRunCount}</span>
+                                        {" "}
+                                        zdjęć.
+                                    </p>
+                                    <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+                                        <div
+                                            className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-500"
+                                            style={{ width: `${currentRunProgressPercent}%` }}
+                                        />
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        ) : null}
+
+                        {session.results.length === 0 && !isProcessing ? (
                             <Card className="border-white/10 bg-white/5 backdrop-blur-xl border-dashed">
                                 <CardContent className="flex flex-col items-center justify-center py-20 text-center">
                                     {session.status !== "failed" ? (
@@ -418,6 +463,25 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                         </div>
                                     </motion.div>
                                 ))}
+                                {isProcessing
+                                    ? Array.from({ length: missingCurrentRunCount }).map((_, idx) => (
+                                        <div
+                                            key={`placeholder-${idx}`}
+                                            className="relative rounded-2xl overflow-hidden border border-dashed border-blue-500/30 bg-blue-500/5 aspect-[3/4] flex items-center justify-center"
+                                        >
+                                            <div className="text-center">
+                                                <Loader2 className="h-6 w-6 animate-spin text-blue-400 mx-auto mb-2" />
+                                                <p className="text-xs text-blue-100">
+                                                    Generowanie
+                                                    {" "}
+                                                    {Math.min(currentRunGeneratedCount + idx + 1, expectedCurrentRunCount)}
+                                                    /
+                                                    {expectedCurrentRunCount}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ))
+                                    : null}
                             </div>
                         )}
                     </div>
