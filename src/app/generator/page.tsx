@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { SessionWizard } from "@/components/session-wizard";
 import { BetaGuard } from "@/components/beta-guard";
 import { Camera, Sparkles, Home, Coins } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/components/auth-provider";
+import { sessionService } from "@/lib/sessions";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,14 +41,51 @@ function WizardWrapper() {
     const searchParams = useSearchParams();
     const sessionId = searchParams.get("sessionId") || undefined;
     const router = useRouter();
+    const { user } = useAuth();
+    const [sessionName, setSessionName] = useState<{ sessionId: string; name: string | null } | null>(null);
+
+    useEffect(() => {
+        let active = true;
+
+        if (!sessionId || !user) {
+            return () => {
+                active = false;
+            };
+        }
+
+        void sessionService.getSessionById(sessionId).then((session) => {
+            if (!active) return;
+            if (!session || session.userId !== user.uid) {
+                setSessionName({ sessionId, name: null });
+                return;
+            }
+            setSessionName({ sessionId, name: session.name || null });
+        });
+
+        return () => {
+            active = false;
+        };
+    }, [sessionId, user]);
+
+    const resolvedSessionName =
+        sessionId && sessionName?.sessionId === sessionId ? sessionName.name : null;
 
     return (
         <div className="space-y-6">
             <div className="mx-auto max-w-3xl rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-zinc-300">
                 {sessionId ? (
-                    <p>
-                        Tryb: <span className="font-semibold text-white">Kontynuacja sesji</span>. Liczbę nowych zdjęć (1-5) ustawisz w ostatnim kroku.
-                    </p>
+                    <div className="space-y-1.5">
+                        <p>
+                            Tryb: <span className="font-semibold text-white">Kontynuacja sesji</span>. Kontynuujesz:
+                            {" "}
+                            <span className="font-semibold text-white">
+                                {resolvedSessionName ?? `ID ${sessionId.slice(0, 8)}...`}
+                            </span>.
+                        </p>
+                        <p className="text-zinc-400">
+                            Liczbę nowych zdjęć (1-5) ustawisz w ostatnim kroku.
+                        </p>
+                    </div>
                 ) : (
                     <p>
                         Tryb: <span className="font-semibold text-white">Nowa sesja</span>. Zostanie utworzona nowa sesja po kliknięciu generowania.
