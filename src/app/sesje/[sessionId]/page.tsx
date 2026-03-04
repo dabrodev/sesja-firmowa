@@ -3,7 +3,7 @@
 import { useEffect, useState, use, useCallback } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { sessionService, Photosession, PromptRunTrace } from "@/lib/sessions";
-import { Calendar, ArrowLeft, Loader2, Download, ExternalLink, ImageIcon, PencilLine, Save, X, Trash2 } from "lucide-react";
+import { Calendar, ArrowLeft, Loader2, Download, ExternalLink, ImageIcon, PencilLine, Save, X, Trash2, Square } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,8 @@ import { downloadFile } from "@/lib/download";
 import { assetService } from "@/lib/assets";
 import { AppHeader } from "@/components/app-header";
 
+const STALE_PROCESSING_TIMEOUT_MS = 5 * 60 * 1000;
+
 export default function SessionDetailsPage({ params }: { params: Promise<{ sessionId: string }> }) {
     const { sessionId } = use(params);
     const { user, userProfile, loading: authLoading, logout } = useAuth();
@@ -43,6 +45,7 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
     const [currentRunGeneratedCount, setCurrentRunGeneratedCount] = useState(0);
     const [deletingResultIndex, setDeletingResultIndex] = useState<number | null>(null);
     const [isDeletingSession, setIsDeletingSession] = useState(false);
+    const [isForceStoppingSession, setIsForceStoppingSession] = useState(false);
 
     const parseDeleteError = useCallback((error: unknown): string => {
         if (error instanceof Error && error.message) return error.message;
@@ -77,8 +80,10 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
             return;
         }
         const activeSessionId = session.id;
-        const workflowInstanceId = session.activeWorkflowInstanceId || activeSessionId;
+        const workflowInstanceId = session.activeWorkflowInstanceId?.trim() || "";
         const workflowRunId = session.activeWorkflowRunId || null;
+        const targetStatusForManualStop: Photosession["status"] =
+            session.results.length > 0 ? "completed" : "failed";
 
         let cancelled = false;
 
@@ -86,11 +91,57 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
             if (cancelled) return;
             setIsSyncingResults(true);
             try {
+                if (!workflowInstanceId) {
+                    const updatedAtMillis = session.updatedAt?.toMillis?.() ?? 0;
+                    const isStale = Date.now() - updatedAtMillis > STALE_PROCESSING_TIMEOUT_MS;
+                    if (isStale) {
+                        await sessionService.updateSession(activeSessionId, {
+                            status: targetStatusForManualStop,
+                            activeWorkflowInstanceId: null,
+                            activeWorkflowRunId: null,
+                        });
+                        if (!cancelled) {
+                            setSession((prev) =>
+                                prev
+                                    ? {
+                                        ...prev,
+                                        status: targetStatusForManualStop,
+                                        activeWorkflowInstanceId: null,
+                                        activeWorkflowRunId: null,
+                                    }
+                                    : prev
+                            );
+                        }
+                    }
+                    return;
+                }
+
                 const response = await fetch(
                     `/api/status?instanceId=${encodeURIComponent(workflowInstanceId)}&sessionId=${encodeURIComponent(activeSessionId)}${workflowRunId ? `&runId=${encodeURIComponent(workflowRunId)}` : ""}`,
                     { cache: "no-store" }
                 );
-                if (!response.ok) return;
+                if (!response.ok) {
+                    if (response.status === 400 || response.status === 404) {
+                        await sessionService.updateSession(activeSessionId, {
+                            status: targetStatusForManualStop,
+                            activeWorkflowInstanceId: null,
+                            activeWorkflowRunId: null,
+                        });
+                        if (!cancelled) {
+                            setSession((prev) =>
+                                prev
+                                    ? {
+                                        ...prev,
+                                        status: targetStatusForManualStop,
+                                        activeWorkflowInstanceId: null,
+                                        activeWorkflowRunId: null,
+                                    }
+                                    : prev
+                            );
+                        }
+                    }
+                    return;
+                }
 
                 const data = await response.json() as {
                     status: "queued" | "running" | "complete" | "errored" | "terminated";
@@ -390,7 +441,7 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
     const handleDeleteSession = async () => {
         if (!session?.id) return;
         if (session.status === "processing") {
-            alert("Nie można usunąć sesji w trakcie aktywnego generowania.");
+            alert("Najpierw zatrzymaj aktywne generowanie (Wymuś zatrzymanie), a potem usuń sesję.");
             return;
         }
 
@@ -414,6 +465,43 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
             alert(parseDeleteError(error));
         } finally {
             setIsDeletingSession(false);
+        }
+    };
+
+    const handleForceStopSession = async () => {
+        if (!session?.id || session.status !== "processing") return;
+
+        const confirmed = confirm(
+            "Wymusić zatrzymanie tej sesji? Workflow zostanie odłączony od sesji, a sesję będzie można usunąć lub kontynuować ręcznie."
+        );
+        if (!confirmed) return;
+
+        const targetStatus: Photosession["status"] =
+            session.results.length > 0 ? "completed" : "failed";
+
+        setIsForceStoppingSession(true);
+        try {
+            await sessionService.updateSession(session.id, {
+                status: targetStatus,
+                activeWorkflowInstanceId: null,
+                activeWorkflowRunId: null,
+            });
+            setSession((prev) =>
+                prev
+                    ? {
+                        ...prev,
+                        status: targetStatus,
+                        activeWorkflowInstanceId: null,
+                        activeWorkflowRunId: null,
+                    }
+                    : prev
+            );
+            setCurrentRunGeneratedCount(0);
+        } catch (error) {
+            console.error("Error force stopping session:", error);
+            alert("Nie udało się zatrzymać sesji. Spróbuj ponownie.");
+        } finally {
+            setIsForceStoppingSession(false);
         }
     };
 
@@ -486,6 +574,17 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                     Kontynuuj sesję (+{session.requestedCount} zdjęć)
                                 </Button>
                             </Link>
+                            {session.status === "processing" ? (
+                                <Button
+                                    variant="outline"
+                                    className="border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20 hover:text-amber-100"
+                                    onClick={() => void handleForceStopSession()}
+                                    disabled={isForceStoppingSession || isDeletingSession}
+                                >
+                                    {isForceStoppingSession ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Square className="mr-2 h-4 w-4" />}
+                                    Wymuś zatrzymanie
+                                </Button>
+                            ) : null}
                             <Button
                                 variant="outline"
                                 className="border-red-500/40 bg-red-500/10 text-red-200 hover:bg-red-500/20 hover:text-red-100"
@@ -530,6 +629,18 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                             className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-500"
                                             style={{ width: `${currentRunProgressPercent}%` }}
                                         />
+                                    </div>
+                                    <div className="pt-1">
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20 hover:text-amber-100"
+                                            onClick={() => void handleForceStopSession()}
+                                            disabled={isForceStoppingSession || isDeletingSession}
+                                        >
+                                            {isForceStoppingSession ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Square className="mr-2 h-4 w-4" />}
+                                            Wymuś zatrzymanie tej sesji
+                                        </Button>
                                     </div>
                                 </CardContent>
                             </Card>

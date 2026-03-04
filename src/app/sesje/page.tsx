@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { sessionService, Photosession } from "@/lib/sessions";
-import { Camera, Calendar, ArrowRight, Loader2, Plus, Sparkles, Image as ImageIcon, Clock3 } from "lucide-react";
+import { Camera, Calendar, ArrowRight, Loader2, Plus, Sparkles, Image as ImageIcon, Clock3, Square } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { AppHeader } from "@/components/app-header";
+
+const STALE_PROCESSING_TIMEOUT_MS = 5 * 60 * 1000;
 
 export default function SessionsPage() {
     const { user, userProfile, loading: authLoading, logout } = useAuth();
@@ -16,6 +18,7 @@ export default function SessionsPage() {
     const [sessions, setSessions] = useState<Photosession[]>([]);
     const [loading, setLoading] = useState(true);
     const [runProgress, setRunProgress] = useState<Record<string, number>>({});
+    const [forceStoppingSessionIds, setForceStoppingSessionIds] = useState<Record<string, boolean>>({});
 
     const fetchData = useCallback(async () => {
         if (!user) return;
@@ -98,15 +101,68 @@ export default function SessionsPage() {
 
         const syncSession = async (processingSession: Photosession) => {
             if (!processingSession.id) return;
-            const workflowInstanceId = processingSession.activeWorkflowInstanceId || processingSession.id;
+            const workflowInstanceId = processingSession.activeWorkflowInstanceId?.trim() || "";
             const workflowRunId = processingSession.activeWorkflowRunId || null;
+            const targetStatusForManualStop: Photosession["status"] =
+                processingSession.results.length > 0 ? "completed" : "failed";
+
+            if (!workflowInstanceId) {
+                const updatedAtMillis = processingSession.updatedAt?.toMillis?.() ?? 0;
+                const isStale = Date.now() - updatedAtMillis > STALE_PROCESSING_TIMEOUT_MS;
+                if (!isStale) return;
+
+                await sessionService.updateSession(processingSession.id, {
+                    status: targetStatusForManualStop,
+                    activeWorkflowInstanceId: null,
+                    activeWorkflowRunId: null,
+                });
+                if (!cancelled) {
+                    setSessions((prev) =>
+                        prev.map((session) =>
+                            session.id === processingSession.id
+                                ? {
+                                    ...session,
+                                    status: targetStatusForManualStop,
+                                    activeWorkflowInstanceId: null,
+                                    activeWorkflowRunId: null,
+                                }
+                                : session
+                        )
+                    );
+                }
+                return;
+            }
 
             try {
                 const response = await fetch(
                     `/api/status?instanceId=${encodeURIComponent(workflowInstanceId)}&sessionId=${encodeURIComponent(processingSession.id)}${workflowRunId ? `&runId=${encodeURIComponent(workflowRunId)}` : ""}`,
                     { cache: "no-store" }
                 );
-                if (!response.ok || cancelled) return;
+                if (cancelled) return;
+                if (!response.ok) {
+                    if (response.status === 400 || response.status === 404) {
+                        await sessionService.updateSession(processingSession.id, {
+                            status: targetStatusForManualStop,
+                            activeWorkflowInstanceId: null,
+                            activeWorkflowRunId: null,
+                        });
+                        if (!cancelled) {
+                            setSessions((prev) =>
+                                prev.map((session) =>
+                                    session.id === processingSession.id
+                                        ? {
+                                            ...session,
+                                            status: targetStatusForManualStop,
+                                            activeWorkflowInstanceId: null,
+                                            activeWorkflowRunId: null,
+                                        }
+                                        : session
+                                )
+                            );
+                        }
+                    }
+                    return;
+                }
 
                 const data = await response.json() as {
                     status: "queued" | "running" | "complete" | "errored" | "terminated";
@@ -204,6 +260,55 @@ export default function SessionsPage() {
         };
     }, [user, sessions]);
 
+    const handleForceStopSession = async (sessionToStop: Photosession) => {
+        if (!sessionToStop.id || sessionToStop.status !== "processing") return;
+
+        const confirmed = confirm(
+            "Wymusić zatrzymanie generowania tej sesji? Możesz później wznowić kontynuację ręcznie."
+        );
+        if (!confirmed) return;
+
+        const targetStatus: Photosession["status"] =
+            sessionToStop.results.length > 0 ? "completed" : "failed";
+        const sessionId = sessionToStop.id;
+
+        setForceStoppingSessionIds((prev) => ({ ...prev, [sessionId]: true }));
+        try {
+            await sessionService.updateSession(sessionId, {
+                status: targetStatus,
+                activeWorkflowInstanceId: null,
+                activeWorkflowRunId: null,
+            });
+
+            setSessions((prev) =>
+                prev.map((session) =>
+                    session.id === sessionId
+                        ? {
+                            ...session,
+                            status: targetStatus,
+                            activeWorkflowInstanceId: null,
+                            activeWorkflowRunId: null,
+                        }
+                        : session
+                )
+            );
+            setRunProgress((prev) => {
+                const next = { ...prev };
+                delete next[sessionId];
+                return next;
+            });
+        } catch (error) {
+            console.error("Failed to force stop session:", error);
+            alert("Nie udało się wymusić zatrzymania sesji. Spróbuj ponownie.");
+        } finally {
+            setForceStoppingSessionIds((prev) => {
+                const next = { ...prev };
+                delete next[sessionId];
+                return next;
+            });
+        }
+    };
+
     const activeGeneratingSessions = sessions.filter((session) => session.status === "processing" && session.id);
 
     if (authLoading || loading) {
@@ -268,6 +373,7 @@ export default function SessionsPage() {
                                     const generatedCount = session.id ? (runProgress[session.id] ?? 0) : 0;
                                     const expectedCount = Math.max(1, session.requestedCount);
                                     const progressPercent = Math.min(100, Math.round((generatedCount / expectedCount) * 100));
+                                    const isForceStopping = session.id ? forceStoppingSessionIds[session.id] === true : false;
 
                                     return (
                                         <div key={`active-${session.id}`} className="rounded-xl border border-blue-400/20 bg-black/20 p-4">
@@ -278,11 +384,23 @@ export default function SessionsPage() {
                                                         Wygenerowano {generatedCount}/{expectedCount} zdjęć
                                                     </p>
                                                 </div>
-                                                <Link href={`/sesje/${session.id}`}>
-                                                    <Button size="sm" className="bg-blue-600 hover:bg-blue-500 text-white">
-                                                        Wróć do sesji
+                                                <div className="flex items-center gap-2">
+                                                    <Link href={`/sesje/${session.id}`}>
+                                                        <Button size="sm" className="bg-blue-600 hover:bg-blue-500 text-white">
+                                                            Wróć do sesji
+                                                        </Button>
+                                                    </Link>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="border-red-500/40 bg-red-500/10 text-red-200 hover:bg-red-500/20 hover:text-red-100"
+                                                        onClick={() => void handleForceStopSession(session)}
+                                                        disabled={isForceStopping}
+                                                    >
+                                                        {isForceStopping ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Square className="mr-2 h-4 w-4" />}
+                                                        Wymuś stop
                                                     </Button>
-                                                </Link>
+                                                </div>
                                             </div>
                                             <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
                                                 <div
@@ -352,11 +470,34 @@ export default function SessionsPage() {
                                     </div>
                                 </div>
                                 <CardContent className="p-4 bg-zinc-900/50 border-t border-white/5">
-                                    <Link href={`/sesje/${session.id}`} className="block">
-                                        <Button className="w-full bg-white/5 hover:bg-blue-600 hover:border-blue-500 text-white border border-white/10 flex items-center justify-center gap-2 transition-all">
-                                            Otwórz sesję <ArrowRight className="h-4 w-4" />
-                                        </Button>
-                                    </Link>
+                                    {session.status === "processing" ? (
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <Link href={`/sesje/${session.id}`} className="block">
+                                                <Button className="w-full bg-white/5 hover:bg-blue-600 hover:border-blue-500 text-white border border-white/10 flex items-center justify-center gap-2 transition-all">
+                                                    Otwórz <ArrowRight className="h-4 w-4" />
+                                                </Button>
+                                            </Link>
+                                            <Button
+                                                variant="outline"
+                                                className="w-full border-red-500/40 bg-red-500/10 text-red-200 hover:bg-red-500/20 hover:text-red-100"
+                                                onClick={() => void handleForceStopSession(session)}
+                                                disabled={session.id ? forceStoppingSessionIds[session.id] === true : false}
+                                            >
+                                                {session.id && forceStoppingSessionIds[session.id] ? (
+                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                ) : (
+                                                    <Square className="mr-2 h-4 w-4" />
+                                                )}
+                                                Stop
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <Link href={`/sesje/${session.id}`} className="block">
+                                            <Button className="w-full bg-white/5 hover:bg-blue-600 hover:border-blue-500 text-white border border-white/10 flex items-center justify-center gap-2 transition-all">
+                                                Otwórz sesję <ArrowRight className="h-4 w-4" />
+                                            </Button>
+                                        </Link>
+                                    )}
                                 </CardContent>
                             </Card>
                         ))}
