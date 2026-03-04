@@ -819,12 +819,15 @@ async function validateGeneratedImageQuality(
 Review this generated corporate portrait for physical realism and composition integrity.
 
 Variation context: ${variation}
+IMPORTANT: Cropped framing (for example upper-body / do pasa / bust shot) is acceptable.
+Do NOT fail an image just because legs or shoes are outside the frame.
+Evaluate only visible anatomy and visible object relationships.
 
 Fail the image if ANY of these occur:
 - unrealistic object scale/proportions (e.g., chair larger than desk, impossible desk-chair relation),
 - impossible body-furniture contact (floating pose, body intersecting chair/desk),
 - anatomy artifacts (extra limbs/fingers/feet, detached limbs, twisted/unnatural joints),
-- detached limb fragments appearing from frame edges.
+- clearly detached limb fragments that look like generation artifacts (not normal crop boundaries).
 
 Return ONLY JSON:
 {"pass": boolean, "severity": "none|low|medium|high", "reasons": ["short reason 1", "short reason 2"]}`,
@@ -892,6 +895,25 @@ async function generateOneImage(
             referenceParts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
         }
     }
+
+    const severityScore = (severity: QualityCheckResult["severity"]): number => {
+        switch (severity) {
+            case "none":
+                return 0;
+            case "low":
+                return 1;
+            case "medium":
+                return 2;
+            case "high":
+                return 3;
+            default:
+                return 2;
+        }
+    };
+
+    let bestCandidateBase64: string | null = null;
+    let bestCandidateScore = Number.POSITIVE_INFINITY;
+    let bestCandidateReasons = "";
     let retryQualityFeedback = "";
 
     for (let attempt = 1; attempt <= 3; attempt++) {
@@ -922,6 +944,19 @@ Preserve identity and scene consistency while fixing these defects.`
                     return part.inlineData.data;
                 }
 
+                const currentScore = severityScore(qualityCheck.severity);
+                if (currentScore < bestCandidateScore) {
+                    bestCandidateBase64 = part.inlineData.data;
+                    bestCandidateScore = currentScore;
+                    bestCandidateReasons = qualityCheck.reasons.slice(0, 3).join("; ");
+                }
+
+                // Low-severity issues should not block the whole workflow.
+                if (qualityCheck.severity === "low") {
+                    console.warn(`[QA] Accepting low-severity image for variation ${variation}: ${qualityCheck.reasons.join("; ")}`);
+                    return part.inlineData.data;
+                }
+
                 const compactReasons = qualityCheck.reasons.slice(0, 3).join("; ");
                 retryQualityFeedback = compactReasons.length > 0
                     ? compactReasons
@@ -936,7 +971,14 @@ Preserve identity and scene consistency while fixing these defects.`
         }
     }
 
-    throw new Error(`Gemini returned no quality-approved image for variation: ${variation}`);
+    if (bestCandidateBase64) {
+        console.warn(
+            `[QA] Falling back to best candidate for variation ${variation}. Severity score=${bestCandidateScore}. Reasons=${bestCandidateReasons || "n/a"}`
+        );
+        return bestCandidateBase64;
+    }
+
+    throw new Error(`Gemini returned no image for variation: ${variation}`);
 }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
