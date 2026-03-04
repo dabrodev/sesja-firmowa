@@ -76,6 +76,7 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
     const [sessionId, setSessionId] = useState<string | null>(initialSessionId || null);
     const [resultUrls, setResultUrls] = useState<string[]>([]);
     const [generationStatus, setGenerationStatus] = useState<string>("Inicjalizuję...");
+    const [generationError, setGenerationError] = useState<string | null>(null);
     const [sessionData, setSessionData] = useState<Photosession | null>(null);
     const [customPrompt, setCustomPrompt] = useState("");
     const [requestedCount, setRequestedCount] = useState(4);
@@ -461,6 +462,7 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                     setHasCompleted(false);
                                                     setResultUrls([]);
                                                     setGenerationStatus("Inicjalizuję sesję...");
+                                                    setGenerationError(null);
 
                                                     let activeSessionId: string | null = sessionId;
                                                     try {
@@ -598,17 +600,24 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                                 activeWorkflowRunId: null,
                                                             });
                                                         }
-                                                        alert("Błąd generowania: " + getReadableError(error, "Nieznany błąd"));
+                                                        const errorMsg = getReadableError(error, "Nieznany błąd");
+                                                        setGenerationError(`Błąd generowania: ${errorMsg}. Twoje punkty (${cost} PKT) nie zostały zużyte lub zostaną zaraz zwrócone na konto.`);
                                                         setIsGenerating(false);
                                                     }
                                                 }}
                                                 className="min-h-16 h-auto w-full max-w-sm px-6 py-4 bg-gradient-to-br from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 text-base sm:text-lg font-bold shadow-2xl shadow-blue-500/30 transition-all hover:scale-105 active:scale-95 rounded-2xl text-white border border-white/10 whitespace-normal text-center leading-tight"
                                             >
                                                 {isGenerating ? (
-                                                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/20 border-t-white mr-2" />
+                                                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/20 border-t-white mr-2 inline-block align-middle" />
                                                 ) : null}
                                                 {sessionData ? `Kontynuuj sesję (+${requestedCount} zdjęć)` : `Utwórz nową sesję (+${requestedCount} zdjęć)`}
                                             </Button>
+
+                                            {generationError && (
+                                                <div className="w-full max-w-md mt-4 p-4 rounded-xl border border-red-500/30 bg-red-500/10 text-red-200 text-sm text-center">
+                                                    {generationError}
+                                                </div>
+                                            )}
 
                                             {sessionData && onNewSessionRequested && (
                                                 <Button variant="ghost" className="text-zinc-400 hover:text-white" onClick={onNewSessionRequested}>

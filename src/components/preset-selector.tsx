@@ -132,13 +132,13 @@ export function PresetSelector({
 }
 
 export const PRESET_OFFICES: PresetItem[] = [
-    { id: "office_minimalist", label: "Jasne / Minimalistyczne biuro", asset: { id: "office_minimalist", url: "/samples/office_minimalist.png", name: "office_minimalist.png", size: 0 }, gender: 'unisex' },
-    { id: "office_corporate", label: "Ciemne / Salach Konferencyjna", asset: { id: "office_corporate", url: "/samples/office_corporate.png", name: "office_corporate.png", size: 0 }, gender: 'unisex' },
+    { id: "office_minimalist", label: "Jasne / Minimalistyczne biuro", asset: { id: "uploads/1772612811991-office_minimalist.png", url: "/samples/office_minimalist.png", name: "office_minimalist.png", size: 0 }, gender: 'unisex' },
+    { id: "office_corporate", label: "Ciemne / Salach Konferencyjna", asset: { id: "uploads/1772612811500-office_corporate.png", url: "/samples/office_corporate.png", name: "office_corporate.png", size: 0 }, gender: 'unisex' },
 ];
 
 export const PRESET_OUTFITS: PresetItem[] = [
-    { id: "outfit_women_blazer", label: "Damska Elegancka Marynarka", asset: { id: "outfit_women_blazer", url: "/samples/outfit_women_blazer.png", name: "outfit_women_blazer.png", size: 0 }, gender: 'female' },
-    { id: "outfit_women_casual", label: "Damski Smart Casual", asset: { id: "outfit_women_casual", url: "/samples/outfit_women_casual.png", name: "outfit_women_casual.png", size: 0 }, gender: 'female' },
-    { id: "outfit_men_suit", label: "Męski Garnitur Biznesowy", asset: { id: "outfit_men_suit", url: "/samples/outfit_men_suit.png", name: "outfit_men_suit.png", size: 0 }, gender: 'male' },
-    { id: "outfit_men_casual", label: "Męski Smart Casual", asset: { id: "outfit_men_casual", url: "/samples/outfit_men_casual.png", name: "outfit_men_casual.png", size: 0 }, gender: 'male' },
+    { id: "outfit_women_blazer", label: "Damska Elegancka Marynarka", asset: { id: "uploads/1772612813639-outfit_women_blazer.png", url: "/samples/outfit_women_blazer.png", name: "outfit_women_blazer.png", size: 0 }, gender: 'female' },
+    { id: "outfit_women_casual", label: "Damski Smart Casual", asset: { id: "uploads/1772612814137-outfit_women_casual.png", url: "/samples/outfit_women_casual.png", name: "outfit_women_casual.png", size: 0 }, gender: 'female' },
+    { id: "outfit_men_suit", label: "Męski Garnitur Biznesowy", asset: { id: "uploads/1772612813225-outfit_men_suit.png", url: "/samples/outfit_men_suit.png", name: "outfit_men_suit.png", size: 0 }, gender: 'male' },
+    { id: "outfit_men_casual", label: "Męski Smart Casual", asset: { id: "uploads/1772612812772-outfit_men_casual.png", url: "/samples/outfit_men_casual.png", name: "outfit_men_casual.png", size: 0 }, gender: 'male' },
 ];
