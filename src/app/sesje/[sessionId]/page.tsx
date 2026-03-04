@@ -3,21 +3,12 @@
 import { useEffect, useState, use, useCallback } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { sessionService, Photosession, PromptRunTrace } from "@/lib/sessions";
-import { Camera, Calendar, ArrowLeft, Loader2, Download, ExternalLink, ImageIcon, PencilLine, Save, X, Trash2 } from "lucide-react";
+import { Calendar, ArrowLeft, Loader2, Download, ExternalLink, ImageIcon, PencilLine, Save, X, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
     Select,
     SelectContent,
@@ -33,10 +24,11 @@ import { extractR2KeyFromReference, referenceUrlToPhotoAsset } from "@/lib/refer
 import { ImageWithPlaceholder } from "@/components/image-with-placeholder";
 import { downloadFile } from "@/lib/download";
 import { assetService } from "@/lib/assets";
+import { AppHeader } from "@/components/app-header";
 
 export default function SessionDetailsPage({ params }: { params: Promise<{ sessionId: string }> }) {
     const { sessionId } = use(params);
-    const { user, loading: authLoading, logout } = useAuth();
+    const { user, userProfile, loading: authLoading, logout } = useAuth();
     const router = useRouter();
     const [session, setSession] = useState<Photosession | null>(null);
     const [loading, setLoading] = useState(true);
@@ -407,60 +399,16 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
 
     return (
         <div className="min-h-screen bg-[#020617] text-white selection:bg-blue-500/30 font-sans pb-20">
-            <header className="border-b border-white/5 bg-black/20 backdrop-blur-xl sticky top-0 z-50">
-                <div className="container mx-auto flex h-16 items-center justify-between px-6">
-                    <div className="flex items-center">
-                        <Link href={`/sesje`}>
-                            <Button variant="ghost" className="text-zinc-400 hover:text-white hover:bg-white/5 -ml-4 mr-4">
-                                <ArrowLeft className="mr-2 h-4 w-4" /> wszystkie sesje
-                            </Button>
-                        </Link>
-                        <div className="flex items-center gap-2">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10 border border-blue-500/20">
-                                <Camera className="h-4 w-4 text-blue-400" />
-                            </div>
-                            <span className="text-lg font-bold tracking-tight">Szczegóły Sesji</span>
-                        </div>
-                    </div>
-
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0">
-                                <Avatar className="h-9 w-9">
-                                    <AvatarImage src={user?.photoURL || ""} alt={user?.displayName || ""} />
-                                    <AvatarFallback className="bg-blue-600 text-white">
-                                        {user?.displayName?.charAt(0) || user?.email?.charAt(0)}
-                                    </AvatarFallback>
-                                </Avatar>
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent className="w-56 bg-[#0f172a] border-white/10 text-white" align="end" forceMount>
-                            <DropdownMenuLabel className="font-normal">
-                                <div className="flex flex-col space-y-1">
-                                    <p className="text-sm font-medium leading-none">{user?.displayName}</p>
-                                    <p className="text-xs leading-none text-white/50">{user?.email}</p>
-                                </div>
-                            </DropdownMenuLabel>
-                            <DropdownMenuSeparator className="bg-white/10" />
-                            <DropdownMenuItem className="focus:bg-white/5 focus:text-white cursor-pointer" asChild>
-                                <Link href="/sesje">moje sesje</Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="focus:bg-white/5 focus:text-white cursor-pointer" asChild>
-                                <Link href="/materialy">moje materiały</Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator className="bg-white/10" />
-                            <DropdownMenuItem
-                                className="focus:bg-red-500/10 focus:text-red-400 cursor-pointer text-red-400"
-                                onClick={() => logout()}
-                            >
-                                wyloguj się
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </div>
-            </header>
+            <AppHeader user={user} userProfile={userProfile} onLogout={logout} sticky />
 
             <main className="container mx-auto px-6 py-8">
+                <div className="mb-6">
+                    <Link href={`/sesje`}>
+                        <Button variant="ghost" className="-ml-4 text-zinc-400 hover:bg-white/5 hover:text-white">
+                            <ArrowLeft className="mr-2 h-4 w-4" /> wszystkie sesje
+                        </Button>
+                    </Link>
+                </div>
                 {/* Header Section */}
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-10">
                     <div>

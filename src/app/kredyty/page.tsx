@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Camera, Coins, Loader2 } from "lucide-react";
+import { Coins, Loader2 } from "lucide-react";
+import { AppHeader } from "@/components/app-header";
 
 const CREDIT_PACKS = [
     { name: "Starter", credits: 300 },
@@ -15,7 +16,7 @@ const CREDIT_PACKS = [
 ];
 
 export default function CreditsPage() {
-    const { user, userProfile, loading } = useAuth();
+    const { user, userProfile, loading, logout } = useAuth();
     const router = useRouter();
 
     useEffect(() => {
@@ -36,23 +37,7 @@ export default function CreditsPage() {
 
     return (
         <div className="min-h-screen bg-[#020617] text-white selection:bg-blue-500/30 font-sans">
-            <header className="border-b border-white/5 bg-black/20 backdrop-blur-xl">
-                <div className="container mx-auto flex h-16 items-center justify-between px-6">
-                    <Link href="/" className="flex items-center gap-2">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600">
-                            <Camera className="h-5 w-5 text-white" />
-                        </div>
-                        <span className="text-xl font-bold tracking-tight">SesjaFirmowa.pl</span>
-                    </Link>
-                    <div className="flex items-center gap-3">
-                        <Link href="/generator">
-                            <Button variant="outline" className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white">
-                                wróć do generatora
-                            </Button>
-                        </Link>
-                    </div>
-                </div>
-            </header>
+            <AppHeader user={user} userProfile={userProfile} loading={loading} onLogout={logout} sticky />
 
             <main className="container mx-auto max-w-5xl px-6 py-12 space-y-8">
                 <div>

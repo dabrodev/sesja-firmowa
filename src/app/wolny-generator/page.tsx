@@ -9,9 +9,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { PhotoUploader } from "@/components/photo-uploader";
 import { useAuth } from "@/components/auth-provider";
 import { PhotoAsset } from "@/lib/store";
+import { AppHeader } from "@/components/app-header";
 
 export default function CustomGeneratorPage() {
-    const { user } = useAuth();
+    const { user, userProfile, loading, logout } = useAuth();
     const userId = user?.uid ?? "";
     const [prompt, setPrompt] = useState("");
     const [isGenerating, setIsGenerating] = useState(false);
@@ -56,7 +57,8 @@ export default function CustomGeneratorPage() {
 
     return (
         <div className="min-h-screen bg-[#020617] text-white selection:bg-blue-500/30 font-sans">
-            <div className="mx-auto max-w-4xl space-y-8 py-12 px-4">
+            <AppHeader user={user} userProfile={userProfile} loading={loading} onLogout={logout} sticky />
+            <div className="mx-auto max-w-4xl space-y-8 py-10 px-4">
                 <div className="text-center space-y-4 mb-12">
                     <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-400 border border-blue-500/20 shadow-[0_0_30px_rgba(59,130,246,0.15)]">
                         <Sparkles className="h-8 w-8" />

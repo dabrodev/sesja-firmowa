@@ -4,12 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { assetService, UserAsset } from "@/lib/assets";
 import { AssetType, useAppStore } from "@/lib/store";
-import { Camera, Coins, Loader2, Sparkles, Trash2, Images, CheckSquare, Square } from "lucide-react";
+import { Loader2, Trash2, Images, CheckSquare, Square } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ImageWithPlaceholder } from "@/components/image-with-placeholder";
 import { sessionService } from "@/lib/sessions";
+import { AppHeader } from "@/components/app-header";
 
 type AssetFilter = "all" | AssetType;
 
@@ -27,7 +28,7 @@ const TYPE_LABELS: Record<AssetType, string> = {
 };
 
 export default function MaterialsPage() {
-    const { user, userProfile, loading: authLoading } = useAuth();
+    const { user, userProfile, loading: authLoading, logout } = useAuth();
     const { removeFaceReference, removeOfficeReference, removeOutfitReference } = useAppStore();
     const router = useRouter();
     const [assets, setAssets] = useState<UserAsset[]>([]);
@@ -184,36 +185,7 @@ export default function MaterialsPage() {
 
     return (
         <div className="min-h-screen bg-[#020617] text-white selection:bg-blue-500/30 font-sans">
-            <header className="border-b border-white/5 bg-black/20 backdrop-blur-xl">
-                <div className="container mx-auto flex h-16 items-center justify-between px-6">
-                    <Link href="/" className="flex items-center gap-2">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600">
-                            <Camera className="h-5 w-5 text-white" />
-                        </div>
-                        <span className="text-xl font-bold tracking-tight">SesjaFirmowa.pl</span>
-                    </Link>
-
-                    <div className="flex items-center gap-3">
-                        {userProfile ? (
-                            <div className="mr-2 hidden items-center gap-2 rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1 text-sm font-medium sm:flex">
-                                <Coins className="h-4 w-4 text-blue-400" />
-                                <span className="text-blue-400">{userProfile.credits}</span>
-                                <span className="text-[10px] uppercase text-blue-400/60">PKT</span>
-                            </div>
-                        ) : null}
-                        <Link href="/sesje">
-                            <Button variant="outline" className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white">
-                                moje sesje
-                            </Button>
-                        </Link>
-                        <Link href="/generator">
-                            <Button className="bg-blue-600 hover:bg-blue-700">
-                                <Sparkles className="mr-2 h-4 w-4" /> nowa sesja
-                            </Button>
-                        </Link>
-                    </div>
-                </div>
-            </header>
+            <AppHeader user={user} userProfile={userProfile} onLogout={logout} sticky />
 
             <main className="container mx-auto px-6 py-12 space-y-8">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">

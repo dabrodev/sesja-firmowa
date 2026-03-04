@@ -3,20 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { sessionService, Photosession } from "@/lib/sessions";
-import { Camera, Calendar, ArrowRight, Loader2, Coins, Plus, Sparkles, Image as ImageIcon, Clock3 } from "lucide-react";
+import { Camera, Calendar, ArrowRight, Loader2, Plus, Sparkles, Image as ImageIcon, Clock3 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { AppHeader } from "@/components/app-header";
 
 export default function SessionsPage() {
     const { user, userProfile, loading: authLoading, logout } = useAuth();
@@ -197,75 +189,7 @@ export default function SessionsPage() {
 
     return (
         <div className="min-h-screen bg-[#020617] text-white selection:bg-blue-500/30 font-sans">
-            <header className="border-b border-white/5 bg-black/20 backdrop-blur-xl">
-                <div className="container mx-auto flex h-16 items-center justify-between px-6">
-                    <Link href="/" className="flex items-center gap-2">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600">
-                            <Camera className="h-5 w-5 text-white" />
-                        </div>
-                        <span className="text-xl font-bold tracking-tight">SesjaFirmowa.pl</span>
-                    </Link>
-
-                    <div className="flex items-center gap-4">
-                        {user && userProfile && (
-                            <div className="mr-2 hidden items-center gap-2 rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1 text-sm font-medium sm:flex">
-                                <Coins className="h-4 w-4 text-blue-400" />
-                                <span className="text-blue-400">{userProfile.credits}</span>
-                                <span className="text-[10px] uppercase text-blue-400/60">PKT</span>
-                            </div>
-                        )}
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0">
-                                    <Avatar className="h-9 w-9">
-                                        <AvatarImage src={user.photoURL || ""} alt={user.displayName || ""} />
-                                        <AvatarFallback className="bg-blue-600 text-white">
-                                            {user.displayName?.charAt(0) || user.email?.charAt(0)}
-                                        </AvatarFallback>
-                                    </Avatar>
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent className="w-56 bg-[#0f172a] border-white/10 text-white" align="end" forceMount>
-                                <DropdownMenuLabel className="font-normal">
-                                    <div className="flex flex-col space-y-1">
-                                        <p className="text-sm font-medium leading-none">{user.displayName}</p>
-                                        <p className="text-xs leading-none text-white/50">{user.email}</p>
-                                    </div>
-                                </DropdownMenuLabel>
-                                <DropdownMenuSeparator className="bg-white/10" />
-                                <DropdownMenuItem className="focus:bg-white/5 focus:text-white cursor-pointer" asChild>
-                                    <Link href="/materialy">moje materiały</Link>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem className="focus:bg-white/5 focus:text-white cursor-pointer" asChild>
-                                    <Link href="/generator">nowa sesja</Link>
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator className="bg-white/10" />
-                                <DropdownMenuItem
-                                    className="focus:bg-red-500/10 focus:text-red-400 cursor-pointer text-red-400"
-                                    onClick={() => logout()}
-                                >
-                                    wyloguj się
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                        <Link href="/wolny-generator">
-                            <Button variant="outline" className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white hidden sm:flex">
-                                <Sparkles className="mr-2 h-4 w-4" /> Generator pojedynczego zdjęcia
-                            </Button>
-                        </Link>
-                        <Link href="/materialy">
-                            <Button variant="outline" className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white hidden sm:flex">
-                                moje materiały
-                            </Button>
-                        </Link>
-                        <Link href="/generator">
-                            <Button variant="outline" className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white">
-                                Nowa sesja
-                            </Button>
-                        </Link>
-                    </div>
-                </div>
-            </header>
+            <AppHeader user={user} userProfile={userProfile} onLogout={logout} sticky />
 
             <main className="container mx-auto px-6 py-12">
                 <div className="mb-12 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
