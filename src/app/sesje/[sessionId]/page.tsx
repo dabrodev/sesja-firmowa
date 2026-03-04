@@ -438,11 +438,6 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
             return;
         }
 
-        if (officeReferencesDraft.length === 0) {
-            alert("Wybierz jedną lokację biurową.");
-            return;
-        }
-
         const updatedFaceReferences = faceReferencesDraft.map((asset) => asset.url);
         const updatedOfficeReferences = officeReferencesDraft.slice(0, 1).map((asset) => asset.url);
         const updatedOutfitReferences = outfitReferencesDraft.map((asset) => asset.url);
@@ -852,7 +847,7 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                 {isEditingReferences ? (
                                     <>
                                         <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 p-3 text-xs text-blue-200">
-                                            Możesz podmienić materiały i kontynuować tę samą sesję. Lokacja biurowa jest ograniczona do 1 zdjęcia, żeby uniknąć miksowania pomieszczeń.
+                                            Możesz podmienić materiały i kontynuować tę samą sesję. Lokacja biurowa jest opcjonalna, ale jeśli ją dodasz, ograniczamy do 1 zdjęcia, żeby uniknąć miksowania pomieszczeń.
                                         </div>
 
                                         <PhotoUploader
@@ -869,8 +864,8 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                         <div className="h-px bg-white/10 w-full" />
 
                                         <PhotoUploader
-                                            title="Lokacja Biurowa"
-                                            description="Wybierz jedną lokację biurową dla kolejnych ujęć tej sesji."
+                                            title="Lokacja Biurowa (opcjonalnie)"
+                                            description="Dodaj naturalne zdjęcie biura dla kolejnych ujęć tej sesji albo opisz miejsce w prompcie."
                                             assets={officeReferencesDraft}
                                             onUpload={(asset) => setOfficeReferencesDraft([asset])}
                                             onRemove={(id) => setOfficeReferencesDraft((prev) => prev.filter((asset) => asset.id !== id))}

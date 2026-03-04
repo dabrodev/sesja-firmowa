@@ -23,7 +23,16 @@ function getErrorMessage(error: unknown, fallback: string): string {
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json() as Partial<GenerateRequestBody>;
-        const { sessionId, uid, faceKeys, officeKeys, outfitKeys = [], customPrompt, requestedCount, runId } = body;
+        const {
+            sessionId,
+            uid,
+            faceKeys,
+            officeKeys = [],
+            outfitKeys = [],
+            customPrompt,
+            requestedCount,
+            runId,
+        } = body;
         const safeRequestedCount = normalizeRequestedCount(requestedCount);
 
         if (
@@ -32,7 +41,6 @@ export async function POST(req: NextRequest) {
             !Array.isArray(faceKeys) ||
             faceKeys.length === 0 ||
             !Array.isArray(officeKeys) ||
-            officeKeys.length === 0 ||
             !Array.isArray(outfitKeys)
         ) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });

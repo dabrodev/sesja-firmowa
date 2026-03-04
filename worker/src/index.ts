@@ -240,7 +240,13 @@ export class GenerationWorkflow extends WorkflowEntrypoint<Env, GenerateParams> 
         const imagePrompts = variations.map((variation, index) => ({
             index: index + 1,
             variation,
-            finalPrompt: buildFinalImagePrompt(prompt, customPrompt, variation, prioritizeOutfit),
+            finalPrompt: buildFinalImagePrompt(
+                prompt,
+                customPrompt,
+                variation,
+                prioritizeOutfit,
+                officeKeys.length > 0
+            ),
         }));
 
         const promptDebug: PromptDebugPayload = {
@@ -272,9 +278,6 @@ export class GenerationWorkflow extends WorkflowEntrypoint<Env, GenerateParams> 
 
                 if (faceImages.length === 0) {
                     throw new Error("Brak dostępnych zdjęć wizerunkowych w chmurze. Wgraj je ponownie i uruchom sesję jeszcze raz.");
-                }
-                if (officeImages.length === 0) {
-                    throw new Error("Brak dostępnych zdjęć biura w chmurze. Wgraj lokację ponownie i uruchom sesję jeszcze raz.");
                 }
 
                     // Generate one image with Gemini
@@ -389,7 +392,7 @@ const workerHandler = {
                     sessionId,
                     uid,
                     faceKeys,
-                    officeKeys,
+                    officeKeys = [],
                     outfitKeys = [],
                     customPrompt = "",
                     requestedCount,
@@ -407,7 +410,6 @@ const workerHandler = {
                     !sessionId ||
                     !uid ||
                     !faceKeys?.length ||
-                    !officeKeys?.length ||
                     !Array.isArray(faceKeys) ||
                     !Array.isArray(officeKeys) ||
                     !Array.isArray(outfitKeys)
@@ -774,11 +776,21 @@ async function generatePromptWithAzure(
 Create a prompt for a high-end business photo session — NOT a passport or ID headshot.`;
 
     const customPromptText = customPrompt.trim();
+    const officeInstruction =
+        officeCount > 0
+            ? "- Keep the exact office/workspace environment from office references"
+            : "- No office references are provided: infer a realistic business workspace from USER PRIORITY or choose a natural office setting";
+    const customPromptPriorityInstruction =
+        customPromptText
+            ? `- USER PRIORITY (highest priority creative direction): ${customPromptText}
+- If USER PRIORITY specifies framing/styling/location, follow it unless it conflicts with identity${officeCount > 0 ? ", office consistency," : ""} or realistic work activity`
+            : "- No additional user prompt was provided: choose a natural, professional composition";
+
     const userMessage = `I have ${faceCount} face reference photo(s), ${officeCount} office/workspace reference photo(s), and ${outfitCount} outfit reference photo(s).
 
 Generate a photorealistic corporate photo prompt (2-3 sentences) with these requirements:
 - Preserve EXACT identity: face structure, skin tone, hair, and natural expression from references
-- Keep the exact office/workspace environment from office references
+${officeInstruction}
 - Keep strict physical realism: believable human anatomy and coherent proportions between person, desk, chair, and other furniture
 - Keep believable perspective and contact points (no floating body parts, no impossible intersections with furniture)
 - Avoid anatomy artifacts (extra limbs, detached legs/arms/hands, broken joints, malformed extremities)
@@ -789,10 +801,7 @@ Generate a photorealistic corporate photo prompt (2-3 sentences) with these requ
 ${prioritizeOutfit
         ? "- USER explicitly requested wider/full-body framing: apply wider framing while keeping candid work activity and realism"
         : "- Default framing: natural medium/close work framing; do NOT force wide/full-body shots unless user explicitly requests it"}
-${customPromptText
-        ? `- USER PRIORITY (highest priority creative direction): ${customPromptText}
-- If USER PRIORITY specifies framing/styling, follow it unless it conflicts with identity, office consistency, or realistic work activity`
-        : "- No additional user prompt was provided: choose a natural, professional composition"}
+${customPromptPriorityInstruction}
 
 Return ONLY the final image prompt text.`;
 
@@ -814,14 +823,14 @@ Return ONLY the final image prompt text.`;
 
     if (!resp.ok) {
         console.error("Azure OpenAI error:", await resp.text());
-        return getDefaultPrompt(customPromptText, prioritizeOutfit);
+        return getDefaultPrompt(customPromptText, prioritizeOutfit, officeCount > 0);
     }
 
     const data = await resp.json() as AzureChatCompletionResponse;
-    return data.choices?.[0]?.message?.content || getDefaultPrompt(customPromptText, prioritizeOutfit);
+    return data.choices?.[0]?.message?.content || getDefaultPrompt(customPromptText, prioritizeOutfit, officeCount > 0);
 }
 
-function getDefaultPrompt(customPrompt: string, prioritizeOutfit: boolean): string {
+function getDefaultPrompt(customPrompt: string, prioritizeOutfit: boolean, hasOfficeReference: boolean): string {
     const trimmedCustomPrompt = customPrompt.trim();
     const activityLine =
         "Depict the subject in authentic work activity (typing, reviewing documents, writing notes, or discussing tasks), not static posing.";
@@ -833,8 +842,11 @@ function getDefaultPrompt(customPrompt: string, prioritizeOutfit: boolean): stri
     const customLine = trimmedCustomPrompt
         ? `Primary user direction (highest priority): ${trimmedCustomPrompt}.`
         : "No extra user direction was provided; choose a clean, natural business composition.";
+    const officeLine = hasOfficeReference
+        ? "Place them in the exact office environment shown in workspace references."
+        : "No office reference is provided, so choose a realistic natural office setting unless the user prompt specifies location details.";
 
-    return `Photorealistic professional business photo session. Preserve the person's exact face, skin tone, hair, clothing, and natural expression from the reference photos. Place them in the exact office environment shown in workspace references. Keep strict physical realism: coherent person-to-furniture scale, believable perspective, natural body contact with chair/desk/floor, and no anatomy artifacts or extra limbs. ${activityLine} ${varietyLine} ${framingLine} Natural window light with soft studio fill, 85mm f/2.0, warm professional color grading. ${customLine}`.trim();
+    return `Photorealistic professional business photo session. Preserve the person's exact face, skin tone, hair, clothing, and natural expression from the reference photos. ${officeLine} Keep strict physical realism: coherent person-to-furniture scale, believable perspective, natural body contact with chair/desk/floor, and no anatomy artifacts or extra limbs. ${activityLine} ${varietyLine} ${framingLine} Natural window light with soft studio fill, 85mm f/2.0, warm professional color grading. ${customLine}`.trim();
 }
 
 // ─── Generate one image with Gemini ──────────────────────────────────────────
@@ -850,11 +862,12 @@ function buildFinalImagePrompt(
     prompt: string,
     customPrompt: string,
     variation: string,
-    prioritizeOutfit: boolean
+    prioritizeOutfit: boolean,
+    hasOfficeReference: boolean
 ): string {
     const trimmedCustomPrompt = customPrompt.trim();
     const customPromptBlock = trimmedCustomPrompt
-        ? `\n\nPRIORITY USER PROMPT (HIGHEST PRIORITY): ${trimmedCustomPrompt}\nWhen this prompt specifies framing/styling, follow it over generic guidance unless it conflicts with identity, office consistency, or realistic work activity.`
+        ? `\n\nPRIORITY USER PROMPT (HIGHEST PRIORITY): ${trimmedCustomPrompt}\nWhen this prompt specifies framing/styling${hasOfficeReference ? "" : "/location"}, follow it over generic guidance unless it conflicts with identity${hasOfficeReference ? ", office consistency," : ""} or realistic work activity.`
         : "";
     const activityRule =
         "Depict the person as genuinely engaged in work activity; avoid static, staged posing.";
@@ -888,11 +901,17 @@ async function generateOneImage(
         referenceParts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
     }
 
-    referenceParts.push({
-        text: `OFFICE/WORKSPACE REFERENCE PHOTOS (${officeImages.length} images):\nThis is the EXACT environment for the photo. You MUST:\n- Use this specific office space as the background/setting\n- Match the wall colors, furniture, decor, window placement, and ambient lighting\n- Keep the environment recognizable and consistent with these photos`,
-    });
-    for (const img of officeImages) {
-        referenceParts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
+    if (officeImages.length > 0) {
+        referenceParts.push({
+            text: `OFFICE/WORKSPACE REFERENCE PHOTOS (${officeImages.length} images):\nThis is the EXACT environment for the photo. You MUST:\n- Use this specific office space as the background/setting\n- Match the wall colors, furniture, decor, window placement, and ambient lighting\n- Keep the environment recognizable and consistent with these photos`,
+        });
+        for (const img of officeImages) {
+            referenceParts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
+        }
+    } else {
+        referenceParts.push({
+            text: "NO OFFICE REFERENCE PHOTOS PROVIDED: infer a realistic office/work context from the prompt and keep perspective/proportions physically coherent.",
+        });
     }
 
     if (outfitImages.length > 0) {

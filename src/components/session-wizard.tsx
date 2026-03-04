@@ -25,7 +25,7 @@ import { CopyPlus } from "lucide-react";
 import { extractR2KeyFromReference, referenceUrlToPhotoAsset } from "@/lib/reference-assets";
 import { isPresetReference } from "@/lib/preset-assets";
 import Link from "next/link";
-import { PresetSelector, PRESET_OFFICES, PRESET_OUTFITS } from "@/components/preset-selector";
+import { PresetSelector, PRESET_OUTFITS } from "@/components/preset-selector";
 
 
 type WizardStepId = "face" | "office" | "generate";
@@ -182,7 +182,7 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
 
     const steps: { id: WizardStepId; label: string; icon: React.ReactNode; completed: boolean }[] = [
         { id: "face", label: "Wizerunek", icon: <User className="h-4 w-4" />, completed: faceAssets.length >= 1 },
-        { id: "office", label: "Biuro i styl", icon: <Building2 className="h-4 w-4" />, completed: officeAssets.length >= 1 },
+        { id: "office", label: "Biuro i styl", icon: <Building2 className="h-4 w-4" />, completed: faceAssets.length >= 1 },
         { id: "generate", label: "Generuj", icon: <Sparkles className="h-4 w-4" />, completed: hasCompleted }
     ];
     const totalCost = requestedCount * COST_PER_PHOTO;
@@ -263,23 +263,12 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                 exit={{ opacity: 0, x: -20 }}
                                 className="space-y-8"
                             >
-                                <PresetSelector
-                                    title="Przykładowe lokalizacje"
-                                    description="Nie masz własnego zdjęcia biura? Wybierz jedno z naszych przygotowanych wnętrz."
-                                    presets={PRESET_OFFICES}
-                                    selectedAssets={officeAssets}
-                                    onSelect={(asset) => {
-                                        // Keep max 1 office by clearing existing user-uploaded if they pick preset
-                                        // or clearing preset if they pick another preset
-                                        officeAssets.forEach(a => removeOfficeReference(a.id));
-                                        addOfficeReference(asset);
-                                    }}
-                                    onDeselect={removeOfficeReference}
-                                    multiple={false}
-                                />
+                                <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 p-3 text-xs text-blue-200">
+                                    Lokalizacja biurowa jest opcjonalna. Jeśli jej nie dodasz, opisz miejsce w kolejnym kroku w polu prompt.
+                                </div>
                                 <PhotoUploader
-                                    title="Własne lokalizacje"
-                                    description="Wgraj własne zdjęcie biura. Używamy jednej lokacji, aby uniknąć miksowania pomieszczeń."
+                                    title="Lokalizacja biurowa (opcjonalnie)"
+                                    description="Wgraj własne, naturalne zdjęcie biura. Używamy jednej lokacji, aby uniknąć miksowania pomieszczeń i błędnych proporcji."
                                     assets={officeAssets}
                                     onUpload={(asset) => {
                                         // Keep max 1 office
@@ -317,7 +306,6 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                         <ChevronLeft className="mr-2 h-4 w-4" /> Wróć do zdjęć twarzy
                                     </Button>
                                     <Button
-                                        disabled={officeAssets.length < 1}
                                         onClick={() => setStep("generate")}
                                         className="bg-gradient-to-br from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 h-12 px-8 shadow-lg shadow-blue-500/20 text-white border border-white/10"
                                     >
@@ -351,7 +339,7 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                             <p className="mx-auto mt-4 max-w-md text-zinc-400 leading-relaxed">
                                                 {sessionData
                                                     ? `Kreator jest w trybie kontynuacji sesji "${sessionData.name}". Wskaż ile nowych ujęć dodać oraz opcjonalny prompt tekstowy.`
-                                                    : "Wszystkie dane zostały przygotowane. System AI przeanalizuje twoje rysy i stworzy fotorealistyczną sesję w wybranych wnętrzach."}
+                                                    : "Wszystkie dane zostały przygotowane. System AI przeanalizuje twoje rysy i stworzy fotorealistyczną sesję biznesową."}
                                             </p>
                                         </div>
 
@@ -453,7 +441,7 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                     className="min-h-[110px] border-white/10 bg-white/5 text-white placeholder:text-zinc-500"
                                                 />
                                                 <p className="text-xs text-zinc-500">
-                                                    Jeśli podasz prompt, ma najwyższy priorytet dla kadru/pozy/stylu. Gdy pole jest puste, użyjemy domyślnego stylu biznesowego.
+                                                    Jeśli podasz prompt, ma najwyższy priorytet dla kadru/pozy/stylu. Jeśli nie dodasz zdjęcia biura, opisz tutaj miejsce (np. nowoczesne biuro z drewnianym biurkiem i dużym oknem). Gdy pole jest puste, użyjemy domyślnego stylu biznesowego.
                                                 </p>
                                             </div>
                                         </div>
