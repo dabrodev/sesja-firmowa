@@ -116,37 +116,41 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                     }
                 }
 
-                if (workflowResults.length > 0) {
-                    const mergedResults = Array.from(new Set([...(session.results || []), ...workflowResults]));
-                    const targetStatus = data.status === "complete" ? "completed" : "processing";
-                    const hasNewResults = mergedResults.length !== session.results.length;
-                    const statusChanged = session.status !== targetStatus;
+                const mergedResults = workflowResults.length > 0
+                    ? Array.from(new Set([...(session.results || []), ...workflowResults]))
+                    : (session.results || []);
+                const hasNewResults = mergedResults.length !== session.results.length;
 
-                    if (hasNewResults || statusChanged) {
+                if (data.status === "complete") {
+                    const shouldFinalize =
+                        hasNewResults ||
+                        session.status !== "completed" ||
+                        Boolean(session.activeWorkflowInstanceId) ||
+                        Boolean(session.activeWorkflowRunId);
+
+                    if (shouldFinalize) {
                         await sessionService.updateSession(activeSessionId, {
-                            status: targetStatus,
+                            status: "completed",
                             results: mergedResults,
-                            activeWorkflowInstanceId: targetStatus === "completed" ? null : workflowInstanceId,
-                            activeWorkflowRunId: targetStatus === "completed" ? null : workflowRunId,
+                            activeWorkflowInstanceId: null,
+                            activeWorkflowRunId: null,
                         });
-
                         if (!cancelled) {
-                            setSession((prev) => {
-                                if (!prev) return prev;
-                                return {
-                                    ...prev,
-                                    status: targetStatus,
-                                    results: mergedResults,
-                                    activeWorkflowInstanceId: targetStatus === "completed" ? null : workflowInstanceId,
-                                    activeWorkflowRunId: targetStatus === "completed" ? null : workflowRunId,
-                                };
-                            });
+                            setSession((prev) =>
+                                prev
+                                    ? {
+                                        ...prev,
+                                        status: "completed",
+                                        results: mergedResults,
+                                        activeWorkflowInstanceId: null,
+                                        activeWorkflowRunId: null,
+                                    }
+                                    : prev
+                            );
                         }
                     }
-                    if (data.status === "complete") {
-                        setCurrentRunGeneratedCount(0);
-                        return;
-                    }
+                    setCurrentRunGeneratedCount(0);
+                    return;
                 }
 
                 if (data.status === "errored" || data.status === "terminated") {
@@ -163,6 +167,29 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                         );
                     }
                     setCurrentRunGeneratedCount(0);
+                    return;
+                }
+
+                if (hasNewResults) {
+                    await sessionService.updateSession(activeSessionId, {
+                        status: "processing",
+                        results: mergedResults,
+                        activeWorkflowInstanceId: workflowInstanceId,
+                        activeWorkflowRunId: workflowRunId,
+                    });
+                    if (!cancelled) {
+                        setSession((prev) =>
+                            prev
+                                ? {
+                                    ...prev,
+                                    status: "processing",
+                                    results: mergedResults,
+                                    activeWorkflowInstanceId: workflowInstanceId,
+                                    activeWorkflowRunId: workflowRunId,
+                                }
+                                : prev
+                        );
+                    }
                 }
             } catch (error) {
                 console.warn("Workflow sync failed:", error);
@@ -231,16 +258,41 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                         }
                         : data;
 
-                    if (hasReferenceMismatch && sanitizedData.id) {
-                        await sessionService.updateSession(sanitizedData.id, {
-                            faceReferences: sanitizedFaceReferences,
-                            officeReferences: sanitizedOfficeReferences,
-                            outfitReferences: sanitizedOutfitReferences,
-                        });
+                    const patch: Partial<Photosession> = {};
+                    if (hasReferenceMismatch) {
+                        patch.faceReferences = sanitizedFaceReferences;
+                        patch.officeReferences = sanitizedOfficeReferences;
+                        patch.outfitReferences = sanitizedOutfitReferences;
                     }
 
-                    setSession(sanitizedData);
-                    resetReferenceDraft(sanitizedData);
+                    const hasAllRequestedResults =
+                        sanitizedData.results.length >= Math.max(1, sanitizedData.requestedCount);
+                    const shouldHealStaleProcessing =
+                        sanitizedData.status === "processing" &&
+                        (
+                            hasAllRequestedResults ||
+                            (
+                                sanitizedData.results.length > 0 &&
+                                !sanitizedData.activeWorkflowInstanceId &&
+                                !sanitizedData.activeWorkflowRunId
+                            )
+                        );
+                    if (shouldHealStaleProcessing) {
+                        patch.status = "completed";
+                        patch.activeWorkflowInstanceId = null;
+                        patch.activeWorkflowRunId = null;
+                    }
+
+                    if (sanitizedData.id && Object.keys(patch).length > 0) {
+                        await sessionService.updateSession(sanitizedData.id, patch);
+                    }
+
+                    const normalizedSession = Object.keys(patch).length > 0
+                        ? { ...sanitizedData, ...patch }
+                        : sanitizedData;
+
+                    setSession(normalizedSession);
+                    resetReferenceDraft(normalizedSession);
                 } catch (error) {
                     console.error("Error fetching session:", error);
                     router.push(`/sesje`);

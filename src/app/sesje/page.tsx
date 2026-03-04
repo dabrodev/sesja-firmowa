@@ -22,7 +22,46 @@ export default function SessionsPage() {
         setLoading(true);
         try {
             const fetchedSessions = await sessionService.getUserSessions(user.uid);
-            setSessions(fetchedSessions);
+            const normalizedSessions = await Promise.all(
+                fetchedSessions.map(async (fetchedSession) => {
+                    const fetchedSessionId = fetchedSession.id;
+                    const hasAllRequestedResults =
+                        fetchedSession.results.length >= Math.max(1, fetchedSession.requestedCount);
+                    const shouldHealStaleProcessing =
+                        fetchedSessionId &&
+                        fetchedSession.status === "processing" &&
+                        (
+                            hasAllRequestedResults ||
+                            (
+                                fetchedSession.results.length > 0 &&
+                                !fetchedSession.activeWorkflowInstanceId &&
+                                !fetchedSession.activeWorkflowRunId
+                            )
+                        );
+
+                    if (!shouldHealStaleProcessing) {
+                        return fetchedSession;
+                    }
+
+                    try {
+                        await sessionService.updateSession(fetchedSessionId, {
+                            status: "completed",
+                            activeWorkflowInstanceId: null,
+                            activeWorkflowRunId: null,
+                        });
+                    } catch (error) {
+                        console.warn("Failed to heal stale processing session:", error);
+                    }
+
+                    return {
+                        ...fetchedSession,
+                        status: "completed" as const,
+                        activeWorkflowInstanceId: null,
+                        activeWorkflowRunId: null,
+                    };
+                })
+            );
+            setSessions(normalizedSessions);
         } catch (error) {
             console.error("Error fetching sessions:", error);
         } finally {
