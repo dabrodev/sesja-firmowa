@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 type GenerateCustomRequestBody = {
     prompt: string;
     referenceKeys?: string[];
+    editImageUrl?: string;
+    editImageKey?: string;
+    maskDataUrl?: string;
 };
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -12,10 +15,19 @@ function getErrorMessage(error: unknown, fallback: string): string {
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json() as Partial<GenerateCustomRequestBody>;
-        const { prompt, referenceKeys } = body;
+        const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+        const referenceKeys = Array.isArray(body.referenceKeys) ? body.referenceKeys : [];
+        const editImageUrl = typeof body.editImageUrl === "string" ? body.editImageUrl.trim() : "";
+        const editImageKey = typeof body.editImageKey === "string" ? body.editImageKey.trim() : "";
+        const maskDataUrl = typeof body.maskDataUrl === "string" ? body.maskDataUrl.trim() : "";
 
-        if (!prompt) {
+        if (!prompt.length) {
             return NextResponse.json({ error: "No prompt provided" }, { status: 400 });
+        }
+
+        const hasEditTarget = editImageKey.length > 0 || editImageUrl.length > 0;
+        if (hasEditTarget && !maskDataUrl.startsWith("data:image/")) {
+            return NextResponse.json({ error: "Maska jest wymagana w trybie edycji." }, { status: 400 });
         }
 
         const workerUrl = process.env.CLOUDFLARE_WORKER_URL;
@@ -28,7 +40,13 @@ export async function POST(req: NextRequest) {
         const workerResp = await fetch(`${workerUrl}/generate-custom`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ prompt, referenceKeys }),
+            body: JSON.stringify({
+                prompt,
+                referenceKeys,
+                ...(editImageUrl ? { editImageUrl } : {}),
+                ...(editImageKey ? { editImageKey } : {}),
+                ...(maskDataUrl ? { maskDataUrl } : {}),
+            }),
         });
 
         if (!workerResp.ok) {

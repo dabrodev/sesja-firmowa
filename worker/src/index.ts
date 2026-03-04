@@ -171,6 +171,32 @@ function buildArchivedKey(key: string): string {
     return `archived/${dayStamp}/${Date.now()}-${crypto.randomUUID()}-${safeKey}`;
 }
 
+function extractWorkerFileKey(fileUrl: string): string | null {
+    try {
+        const parsed = new URL(fileUrl);
+        const workerBase = new URL(WORKER_URL);
+        if (parsed.origin !== workerBase.origin || parsed.pathname !== "/file") {
+            return null;
+        }
+
+        const key = parsed.searchParams.get("key");
+        return key && key.trim().length > 0 ? key.trim() : null;
+    } catch {
+        return null;
+    }
+}
+
+function parseDataUrl(dataUrl: string): { mimeType: string; base64: string } | null {
+    const match = dataUrl.match(/^data:([^;,]+);base64,([A-Za-z0-9+/=]+)$/);
+    if (!match) return null;
+
+    const mimeType = match[1].trim().toLowerCase();
+    const base64 = match[2].trim();
+    if (!mimeType || !base64) return null;
+
+    return { mimeType, base64 };
+}
+
 // ─── Cloudflare Workflow ──────────────────────────────────────────────────────
 
 export class GenerationWorkflow extends WorkflowEntrypoint<Env, GenerateParams> {
@@ -423,8 +449,21 @@ const workerHandler = {
                 return new Response("Method not allowed", { status: 405, headers: CORS_HEADERS });
             }
             try {
-                const body = await request.json() as { prompt?: string; referenceKeys?: string[] };
-                const { prompt, referenceKeys } = body;
+                const body = await request.json() as {
+                    prompt?: string;
+                    referenceKeys?: string[];
+                    editImageUrl?: string;
+                    editImageKey?: string;
+                    maskDataUrl?: string;
+                };
+                const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+                const referenceKeys = Array.isArray(body.referenceKeys)
+                    ? body.referenceKeys.filter((key): key is string => typeof key === "string" && key.trim().length > 0)
+                    : [];
+                const editImageUrl = typeof body.editImageUrl === "string" ? body.editImageUrl.trim() : "";
+                const editImageKey = typeof body.editImageKey === "string" ? body.editImageKey.trim() : "";
+                const maskDataUrl = typeof body.maskDataUrl === "string" ? body.maskDataUrl.trim() : "";
+                const isEditRequest = editImageKey.length > 0 || editImageUrl.length > 0;
 
                 if (!prompt) {
                     return new Response(JSON.stringify({ error: "Missing required field: prompt" }), {
@@ -432,7 +471,13 @@ const workerHandler = {
                     });
                 }
 
-                console.log(`[Custom Generator] Prompt: ${prompt}, References: ${referenceKeys?.length || 0}`);
+                if (isEditRequest && !maskDataUrl.startsWith("data:image/")) {
+                    return new Response(JSON.stringify({ error: "Missing required field: maskDataUrl for edit mode" }), {
+                        status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+                    });
+                }
+
+                console.log(`[Custom Generator] Prompt: ${prompt}, References: ${referenceKeys.length}, Edit mode: ${isEditRequest}`);
                 const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 
                 // Fetch reference images if provided
@@ -441,14 +486,68 @@ const workerHandler = {
                     refImages = await fetchImagesFromR2(env, referenceKeys, { allowMissing: true, context: "custom-generator" });
                 }
 
-                // Append the requested 5:4 aspect ratio directive to the prompt
-                const finalPrompt = `${prompt}\n\n[Instruction: Create image in 5:4 aspect ratio]`;
+                const parts: GeminiPart[] = [];
 
-                const parts: GeminiPart[] = [{ text: finalPrompt }];
-                if (refImages.length > 0) {
-                    parts.push({ text: `\nREFERENCE PHOTOS (${refImages.length} images):\nPlease use these images as a visual reference for the subject, style, or composition as described in the prompt.` });
-                    for (const img of refImages) {
-                        parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
+                if (isEditRequest) {
+                    const parsedMask = parseDataUrl(maskDataUrl);
+                    if (!parsedMask) {
+                        return new Response(JSON.stringify({ error: "Invalid maskDataUrl format" }), {
+                            status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+                        });
+                    }
+
+                    let sourceImageKey = editImageKey;
+                    if (!sourceImageKey && editImageUrl) {
+                        const extractedKey = extractWorkerFileKey(editImageUrl);
+                        if (!extractedKey) {
+                            return new Response(JSON.stringify({ error: "Invalid editImageUrl. Provide worker /file?key= URL or editImageKey." }), {
+                                status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+                            });
+                        }
+                        sourceImageKey = extractedKey;
+                    }
+
+                    if (!sourceImageKey) {
+                        return new Response(JSON.stringify({ error: "Missing source image for edit mode." }), {
+                            status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+                        });
+                    }
+
+                    const sourceImage = await fetchImagesFromR2(env, [sourceImageKey], {
+                        allowMissing: false,
+                        context: "custom-edit-source",
+                    });
+                    const source = sourceImage[0];
+                    if (!source) {
+                        throw new Error("Edit source image was not found");
+                    }
+
+                    parts.push({
+                        text: `EDIT MODE: Apply only the requested modification to the source image while preserving the original person identity, camera perspective, lighting, office scene, and realism.
+Only change pixels marked by the MASK IMAGE. Keep all unmasked areas unchanged.
+EDIT INSTRUCTION: ${prompt}`,
+                    });
+                    parts.push({ text: "SOURCE IMAGE (edit this image):" });
+                    parts.push({ inlineData: { mimeType: source.mimeType, data: source.base64 } });
+                    parts.push({ text: "MASK IMAGE (red/opaque painted area marks what can be changed; unpainted area must stay the same):" });
+                    parts.push({ inlineData: { mimeType: parsedMask.mimeType, data: parsedMask.base64 } });
+
+                    if (refImages.length > 0) {
+                        parts.push({ text: `REFERENCE PHOTOS (${refImages.length} images):\nUse these as identity/style support while preserving the source image context.` });
+                        for (const img of refImages) {
+                            parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
+                        }
+                    }
+                } else {
+                    // Append the requested 5:4 aspect ratio directive to the prompt
+                    const finalPrompt = `${prompt}\n\n[Instruction: Create image in 5:4 aspect ratio]`;
+                    parts.push({ text: finalPrompt });
+
+                    if (refImages.length > 0) {
+                        parts.push({ text: `\nREFERENCE PHOTOS (${refImages.length} images):\nPlease use these images as a visual reference for the subject, style, or composition as described in the prompt.` });
+                        for (const img of refImages) {
+                            parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
+                        }
                     }
                 }
 
@@ -475,7 +574,7 @@ const workerHandler = {
                 }
 
                 // Save to R2
-                const key = `uploads/custom-${Date.now()}.jpg`;
+                const key = `uploads/${isEditRequest ? "edited" : "custom"}-${Date.now()}.jpg`;
                 const imageData = base64ToArrayBuffer(base64Image);
                 await env.MEDIA_BUCKET.put(key, imageData, {
                     httpMetadata: { contentType: "image/jpeg" },

@@ -72,6 +72,15 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
         });
     }, [resultCount]);
 
+    const openResultEditor = useCallback((resultUrl: string) => {
+        const editKey = extractR2KeyFromReference(resultUrl);
+        const editParams = new URLSearchParams({
+            edit: resultUrl,
+            ...(editKey ? { editKey } : {}),
+        });
+        router.push(`/wolny-generator?${editParams.toString()}`);
+    }, [router]);
+
     useEffect(() => {
         if (selectedResultIndex === null) return;
         if (resultCount === 0) {
@@ -760,7 +769,7 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                                     className="bg-emerald-600/80 hover:bg-emerald-500 text-white backdrop-blur-md"
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        router.push(`/wolny-generator?edit=${encodeURIComponent(url)}`);
+                                                        openResultEditor(url);
                                                     }}
                                                     title="Edytuj to zdjęcie"
                                                 >
@@ -1102,15 +1111,27 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                             onClick={(e) => e.stopPropagation()}
                             className="relative mx-auto flex h-full w-full max-w-5xl items-center justify-center rounded-2xl border border-white/10 bg-zinc-950/90 p-4 shadow-2xl md:p-6"
                         >
-                            <Button
-                                size="icon"
-                                variant="secondary"
-                                onClick={closeResultPreview}
-                                className="absolute right-3 top-3 z-20 rounded-full border border-white/20 bg-black/60 text-white hover:bg-black/80"
-                                aria-label="Zamknij podgląd"
-                            >
-                                <X className="h-4 w-4" />
-                            </Button>
+                            <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
+                                <Button
+                                    size="icon"
+                                    variant="secondary"
+                                    onClick={() => openResultEditor(selectedResultUrl)}
+                                    className="rounded-full border border-emerald-300/30 bg-emerald-600/70 text-white hover:bg-emerald-500"
+                                    aria-label="Edytuj zdjęcie"
+                                    title="Edytuj zdjęcie"
+                                >
+                                    <PencilLine className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                    size="icon"
+                                    variant="secondary"
+                                    onClick={closeResultPreview}
+                                    className="rounded-full border border-white/20 bg-black/60 text-white hover:bg-black/80"
+                                    aria-label="Zamknij podgląd"
+                                >
+                                    <X className="h-4 w-4" />
+                                </Button>
+                            </div>
 
                             {resultCount > 1 ? (
                                 <>
