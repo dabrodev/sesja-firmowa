@@ -54,6 +54,12 @@ type PromptDebugPayload = {
     createdAtIso: string;
 };
 
+type QualityCheckResult = {
+    pass: boolean;
+    reasons: string[];
+    severity: "none" | "low" | "medium" | "high" | "unknown";
+};
+
 function getErrorMessage(error: unknown, fallback: string): string {
     const normalized = getReadableError(error);
     return normalized || fallback;
@@ -683,6 +689,9 @@ Create a prompt for a high-end business photo session — NOT a passport or ID h
 Generate a photorealistic corporate photo prompt (2-3 sentences) with these requirements:
 - Preserve EXACT identity: face structure, skin tone, hair, and natural expression from references
 - Keep the exact office/workspace environment from office references
+- Keep strict physical realism: believable human anatomy and coherent proportions between person, desk, chair, and other furniture
+- Keep believable perspective and contact points (no floating body parts, no impossible intersections with furniture)
+- Avoid anatomy artifacts (extra limbs, detached legs/arms/hands, broken joints, malformed extremities)
 - Use realistic premium business photography style: natural window light + soft studio fill, 85mm lens, f/2.0
 - The result must be suitable for LinkedIn, press materials, and company websites
 ${prioritizeOutfit
@@ -729,10 +738,17 @@ function getDefaultPrompt(customPrompt: string, prioritizeOutfit: boolean): stri
         ? `Primary user direction (highest priority): ${trimmedCustomPrompt}.`
         : "No extra user direction was provided; choose a clean, natural business composition.";
 
-    return `Photorealistic professional business photo session. Preserve the person's exact face, skin tone, hair, clothing, and natural expression from the reference photos. Place them in the exact office environment shown in workspace references. ${framingLine} Natural window light with soft studio fill, 85mm f/2.0, warm professional color grading. ${customLine}`.trim();
+    return `Photorealistic professional business photo session. Preserve the person's exact face, skin tone, hair, clothing, and natural expression from the reference photos. Place them in the exact office environment shown in workspace references. Keep strict physical realism: coherent person-to-furniture scale, believable perspective, natural body contact with chair/desk/floor, and no anatomy artifacts or extra limbs. ${framingLine} Natural window light with soft studio fill, 85mm f/2.0, warm professional color grading. ${customLine}`.trim();
 }
 
 // ─── Generate one image with Gemini ──────────────────────────────────────────
+
+const PHYSICAL_REALISM_GUARDRAILS = `PHYSICAL REALISM GUARDRAILS (CRITICAL):
+- Keep coherent scale and perspective between person, chair, desk, and room objects.
+- If the person is seated, posture must be physically plausible: hips aligned to chair seat, legs oriented naturally, feet placement believable.
+- No impossible intersections: body parts or clothing passing through desk/chair/objects.
+- Human anatomy must be natural: no extra or detached limbs/fingers/feet, no duplicated body parts, no broken joint geometry.
+- If framing is cropped, crop cleanly at natural boundaries; do not leave detached limb fragments at frame edges.`;
 
 function buildFinalImagePrompt(
     prompt: string,
@@ -748,7 +764,98 @@ function buildFinalImagePrompt(
         ? "Prioritize wider framing so outfit and shoes stay visible whenever physically possible."
         : "Respect requested framing in variation/user prompt and avoid forcing full-body framing when not requested.";
 
-    return `PHOTO SESSION STYLE: ${prompt}\n\nVARIATION INSTRUCTIONS: ${variation}${customPromptBlock}\n\nIMPORTANT: Do NOT invent or change the person's facial expression. Reproduce it exactly as it appears in reference photos. ${framingRule} The image must look like a real professional business photo session, not an illustration or passport photo.`;
+    return `PHOTO SESSION STYLE: ${prompt}\n\nVARIATION INSTRUCTIONS: ${variation}${customPromptBlock}\n\nIMPORTANT: Do NOT invent or change the person's facial expression. Reproduce it exactly as it appears in reference photos. ${framingRule}\n\n${PHYSICAL_REALISM_GUARDRAILS}\n\nThe image must look like a real professional business photo session, not an illustration or passport photo.`;
+}
+
+function extractFirstTextPart(response: unknown): string | null {
+    const responseWithCandidates = response as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    };
+    const candidates = responseWithCandidates.candidates;
+    const parts = candidates?.[0]?.content?.parts ?? [];
+    for (const part of parts) {
+        if (typeof part.text === "string" && part.text.trim().length > 0) {
+            return part.text.trim();
+        }
+    }
+    return null;
+}
+
+function parseJsonObjectFromText(text: string): Record<string, unknown> | null {
+    try {
+        const parsed = JSON.parse(text) as unknown;
+        if (parsed && typeof parsed === "object") return parsed as Record<string, unknown>;
+    } catch {
+        // continue
+    }
+
+    const objectMatch = text.match(/\{[\s\S]*\}/);
+    if (!objectMatch) return null;
+
+    try {
+        const parsed = JSON.parse(objectMatch[0]) as unknown;
+        if (parsed && typeof parsed === "object") return parsed as Record<string, unknown>;
+    } catch {
+        return null;
+    }
+
+    return null;
+}
+
+async function validateGeneratedImageQuality(
+    env: Env,
+    imageBase64: string,
+    variation: string
+): Promise<QualityCheckResult | null> {
+    try {
+        const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
+        const response = await ai.models.generateContent({
+            model: "gemini-3.1-flash-image-preview",
+            contents: [{
+                role: "user",
+                parts: [
+                    {
+                        text: `You are a strict photo QA reviewer.
+Review this generated corporate portrait for physical realism and composition integrity.
+
+Variation context: ${variation}
+
+Fail the image if ANY of these occur:
+- unrealistic object scale/proportions (e.g., chair larger than desk, impossible desk-chair relation),
+- impossible body-furniture contact (floating pose, body intersecting chair/desk),
+- anatomy artifacts (extra limbs/fingers/feet, detached limbs, twisted/unnatural joints),
+- detached limb fragments appearing from frame edges.
+
+Return ONLY JSON:
+{"pass": boolean, "severity": "none|low|medium|high", "reasons": ["short reason 1", "short reason 2"]}`,
+                    },
+                    { inlineData: { mimeType: "image/jpeg", data: imageBase64 } },
+                ],
+            }],
+            config: { responseModalities: ["TEXT"] },
+        });
+
+        const text = extractFirstTextPart(response);
+        if (!text) return null;
+
+        const parsed = parseJsonObjectFromText(text);
+        if (!parsed) return null;
+
+        const pass = parsed.pass === true;
+        const severityRaw = typeof parsed.severity === "string" ? parsed.severity.toLowerCase() : "unknown";
+        const severity =
+            severityRaw === "none" || severityRaw === "low" || severityRaw === "medium" || severityRaw === "high"
+                ? severityRaw
+                : "unknown";
+        const reasons = Array.isArray(parsed.reasons)
+            ? parsed.reasons.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+            : [];
+
+        return { pass, severity, reasons };
+    } catch (error) {
+        console.warn(`[QA] Quality validation failed: ${getReadableError(error) || "unknown error"}`);
+        return null;
+    }
 }
 
 async function generateOneImage(
@@ -761,42 +868,47 @@ async function generateOneImage(
 ): Promise<string> {  // throws on failure — workflow will retry
     const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 
-    const parts: GeminiPart[] = [];
+    const referenceParts: GeminiPart[] = [];
 
-    parts.push({
+    referenceParts.push({
         text: `FACE REFERENCE PHOTOS (${faceImages.length} images):\nThese show the EXACT person to photograph. You MUST:\n- Preserve their face structure, skin tone, eye color, nose shape, jawline 100% accurately\n- Keep their hair color, length, and style EXACTLY as shown\n- Reproduce visible clothing/style cues as faithfully as possible`,
     });
     for (const img of faceImages) {
-        parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
+        referenceParts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
     }
 
-    parts.push({
+    referenceParts.push({
         text: `OFFICE/WORKSPACE REFERENCE PHOTOS (${officeImages.length} images):\nThis is the EXACT environment for the photo. You MUST:\n- Use this specific office space as the background/setting\n- Match the wall colors, furniture, decor, window placement, and ambient lighting\n- Keep the environment recognizable and consistent with these photos`,
     });
     for (const img of officeImages) {
-        parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
+        referenceParts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
     }
 
     if (outfitImages.length > 0) {
-        parts.push({
+        referenceParts.push({
             text: `OUTFIT REFERENCE PHOTOS (${outfitImages.length} images):\nUse these as wardrobe guidance. Prioritize similar clothing silhouette, color palette, fabrics, and styling details.`,
         });
         for (const img of outfitImages) {
-            parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
+            referenceParts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
         }
     }
-
-    parts.push({
-        text: finalImagePrompt,
-    });
+    let retryQualityFeedback = "";
 
     for (let attempt = 1; attempt <= 3; attempt++) {
         console.log(`[Gemini] Calling API for variation ${variation}, attempt ${attempt}/3`);
+        const retryPromptBlock = retryQualityFeedback
+            ? `\n\nRETRY QUALITY CORRECTIONS (MUST FIX): ${retryQualityFeedback}
+Preserve identity and scene consistency while fixing these defects.`
+            : "";
+        const requestParts: GeminiPart[] = [
+            ...referenceParts,
+            { text: `${finalImagePrompt}${retryPromptBlock}` },
+        ];
 
         // Throws on error — allows Workflow to retry the step
         const response = await ai.models.generateContent({
             model: "gemini-3.1-flash-image-preview",
-            contents: [{ role: "user", parts }],
+            contents: [{ role: "user", parts: requestParts }],
             config: { responseModalities: ["TEXT", "IMAGE"] },
         });
 
@@ -804,8 +916,18 @@ async function generateOneImage(
 
         for (const part of response.candidates?.[0]?.content?.parts ?? []) {
             if (part.inlineData?.data) {
-                console.log(`[Gemini] Got image data for variation: ${variation}`);
-                return part.inlineData.data;
+                const qualityCheck = await validateGeneratedImageQuality(env, part.inlineData.data, variation);
+                if (!qualityCheck || qualityCheck.pass) {
+                    console.log(`[Gemini] Got quality-approved image for variation: ${variation}`);
+                    return part.inlineData.data;
+                }
+
+                const compactReasons = qualityCheck.reasons.slice(0, 3).join("; ");
+                retryQualityFeedback = compactReasons.length > 0
+                    ? compactReasons
+                    : "Fix anatomy, object scale, and body-object contact realism.";
+                console.warn(`[QA] Variation ${variation} rejected on attempt ${attempt}: ${retryQualityFeedback}`);
+                break;
             }
         }
 
@@ -814,7 +936,7 @@ async function generateOneImage(
         }
     }
 
-    throw new Error(`Gemini returned no image for variation: ${variation}`);
+    throw new Error(`Gemini returned no quality-approved image for variation: ${variation}`);
 }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
