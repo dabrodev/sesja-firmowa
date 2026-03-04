@@ -54,12 +54,6 @@ type PromptDebugPayload = {
     createdAtIso: string;
 };
 
-type QualityCheckResult = {
-    pass: boolean;
-    reasons: string[];
-    severity: "none" | "low" | "medium" | "high" | "unknown";
-};
-
 function getErrorMessage(error: unknown, fallback: string): string {
     const normalized = getReadableError(error);
     return normalized || fallback;
@@ -115,19 +109,19 @@ const CORS_HEADERS = {
 };
 
 const DEFAULT_VARIATIONS = [
-    "Scene: person looking directly at camera, upper body framing, natural moment between tasks. Maintain their EXACT natural facial expression from the reference photos — do not alter it.",
-    "Scene: person working at laptop or reviewing documents at their desk, slightly angled, candid moment of focused work. Maintain their EXACT natural facial expression from the reference photos.",
-    "Scene: person in mid-conversation or presenting — gesturing naturally or leaning forward, engaged posture, 3/4 body framing. Maintain their EXACT natural facial expression from the reference photos.",
-    "Scene: person standing near a window or by their workspace, looking thoughtfully to the side, candid documentary-style framing. Maintain their EXACT natural facial expression from the reference photos.",
-    "Scene: person walking through the office corridor with confident posture, documentary-style motion freeze, business editorial framing. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: side close-up (one-sided framing) of person actively typing or writing notes at their desk, candid moment of focused work. Maintain their EXACT natural facial expression from the reference photos — do not alter it.",
+    "Scene: medium 3/4 shot of person working at laptop or reviewing documents at their desk, slightly angled, candid moment of focused work. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: top-down perspective (slightly from above) of person reviewing notes, planning tasks, or annotating documents at workspace. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: low-angle perspective (slightly from below) during active work discussion or presenting near desk, natural engaged posture, documentary style. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: person moving through office corridor while engaged in work context (e.g., carrying documents or heading to a meeting), natural motion freeze, business editorial framing. Maintain their EXACT natural facial expression from the reference photos.",
 ];
 
 const OUTFIT_PRIORITY_VARIATIONS = [
-    "Scene: person looking directly at camera in their office, standing naturally. Use full-body framing from head to shoes so wardrobe and shoes are clearly visible. Maintain their EXACT natural facial expression from the reference photos — do not alter it.",
-    "Scene: person working at laptop or reviewing documents at their desk, slightly angled. Use wide composition that includes full outfit and visible shoes under/near the desk whenever physically possible. Maintain their EXACT natural facial expression from the reference photos.",
-    "Scene: person in mid-conversation or presenting — gesturing naturally or leaning forward, engaged posture. Use at least 7/8 body framing (prefer full body) so clothing and shoes are visible. Maintain their EXACT natural facial expression from the reference photos.",
-    "Scene: person standing near a window or by their workspace, looking thoughtfully to the side, candid documentary-style framing. Use full-body framing from head to shoes. Maintain their EXACT natural facial expression from the reference photos.",
-    "Scene: person walking through the office corridor with confident posture, documentary-style motion freeze, business editorial framing. Keep the entire silhouette in frame and show shoes clearly. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: person working while standing at a desk or high table in their office (e.g., reviewing documents, taking notes). Use medium-wide candid framing so most of the outfit is visible naturally. Maintain their EXACT natural facial expression from the reference photos — do not alter it.",
+    "Scene: side close-up (one-sided framing) of person working at laptop, typing, or checking key document details. Keep hands and tools naturally involved in work. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: top-down perspective (slightly from above) of person organizing documents/notebook/tablet at desk, authentic workflow moment. Keep outfit cues visible where natural without forcing full body. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: low-angle perspective (slightly from below) of person in active work conversation or presenting near workspace, engaged posture. Keep framing candid and functional, not posed. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: person moving through office corridor while engaged in work context (e.g., carrying documents or heading to a meeting), documentary-style motion freeze. Use full-body framing from head to shoes so entire silhouette and shoes are visible. Maintain their EXACT natural facial expression from the reference photos.",
 ];
 
 function normalizeRequestedCount(value: number | undefined): number {
@@ -692,14 +686,16 @@ Generate a photorealistic corporate photo prompt (2-3 sentences) with these requ
 - Keep strict physical realism: believable human anatomy and coherent proportions between person, desk, chair, and other furniture
 - Keep believable perspective and contact points (no floating body parts, no impossible intersections with furniture)
 - Avoid anatomy artifacts (extra limbs, detached legs/arms/hands, broken joints, malformed extremities)
+- Show authentic work activity (typing, reviewing documents, writing notes, discussion at work); avoid static posed portrait look
 - Use realistic premium business photography style: natural window light + soft studio fill, 85mm lens, f/2.0
 - The result must be suitable for LinkedIn, press materials, and company websites
+- Allow varied camera framing and perspective across the set (side close-up, top-down, low-angle, medium, wider) while keeping realism
 ${prioritizeOutfit
-        ? "- Prioritize outfit visibility with wider framing (head-to-shoes when physically possible)"
+        ? "- When outfit guidance is present, keep varied framings; ensure at least one natural shot shows full silhouette and shoes, but do not force all shots to be wide"
         : "- Keep framing natural to the scene; do NOT force full-body framing when it is not requested"}
 ${customPromptText
         ? `- USER PRIORITY (highest priority creative direction): ${customPromptText}
-- If USER PRIORITY specifies pose/framing/styling, follow it unless it conflicts with identity or office consistency`
+- If USER PRIORITY specifies framing/styling, follow it unless it conflicts with identity, office consistency, or realistic work activity`
         : "- No additional user prompt was provided: choose a natural, professional composition"}
 
 Return ONLY the final image prompt text.`;
@@ -731,14 +727,18 @@ Return ONLY the final image prompt text.`;
 
 function getDefaultPrompt(customPrompt: string, prioritizeOutfit: boolean): string {
     const trimmedCustomPrompt = customPrompt.trim();
+    const activityLine =
+        "Depict the subject in authentic work activity (typing, reviewing documents, writing notes, or discussing tasks), not static posing.";
+    const varietyLine =
+        "Allow natural variety in camera perspective and framing (side close-up, top-down, low-angle, medium, wider) according to scene context.";
     const framingLine = prioritizeOutfit
-        ? "Prioritize wider composition so outfit and shoes are visible whenever physically possible."
+        ? "Keep mixed framings; include at least one natural shot where full silhouette and shoes are visible, without forcing every shot to be wide."
         : "Keep composition natural to the scene and avoid forcing full-body framing unless explicitly requested.";
     const customLine = trimmedCustomPrompt
         ? `Primary user direction (highest priority): ${trimmedCustomPrompt}.`
         : "No extra user direction was provided; choose a clean, natural business composition.";
 
-    return `Photorealistic professional business photo session. Preserve the person's exact face, skin tone, hair, clothing, and natural expression from the reference photos. Place them in the exact office environment shown in workspace references. Keep strict physical realism: coherent person-to-furniture scale, believable perspective, natural body contact with chair/desk/floor, and no anatomy artifacts or extra limbs. ${framingLine} Natural window light with soft studio fill, 85mm f/2.0, warm professional color grading. ${customLine}`.trim();
+    return `Photorealistic professional business photo session. Preserve the person's exact face, skin tone, hair, clothing, and natural expression from the reference photos. Place them in the exact office environment shown in workspace references. Keep strict physical realism: coherent person-to-furniture scale, believable perspective, natural body contact with chair/desk/floor, and no anatomy artifacts or extra limbs. ${activityLine} ${varietyLine} ${framingLine} Natural window light with soft studio fill, 85mm f/2.0, warm professional color grading. ${customLine}`.trim();
 }
 
 // ─── Generate one image with Gemini ──────────────────────────────────────────
@@ -758,107 +758,19 @@ function buildFinalImagePrompt(
 ): string {
     const trimmedCustomPrompt = customPrompt.trim();
     const customPromptBlock = trimmedCustomPrompt
-        ? `\n\nPRIORITY USER PROMPT (HIGHEST PRIORITY): ${trimmedCustomPrompt}\nWhen this prompt specifies pose/framing/styling, follow it over generic guidance unless it conflicts with identity or office consistency.`
+        ? `\n\nPRIORITY USER PROMPT (HIGHEST PRIORITY): ${trimmedCustomPrompt}\nWhen this prompt specifies framing/styling, follow it over generic guidance unless it conflicts with identity, office consistency, or realistic work activity.`
         : "";
+    const activityRule =
+        "Depict the person as genuinely engaged in work activity; avoid static, staged posing.";
+    const varietyRule =
+        "Use variation-appropriate framing/perspective (side close-up, top-down, low-angle, medium, or wider) and keep it realistic for this scene.";
+    const identityRule =
+        "Highest priority: keep exact same face identity as references (face geometry, eyes, nose, jawline, skin tone, hairline).";
     const framingRule = prioritizeOutfit
-        ? "Prioritize wider framing so outfit and shoes stay visible whenever physically possible."
+        ? "Do not force all shots to be wide; when feasible in this variation, include natural visibility of outfit details, and ensure at least one shot in the set can show full silhouette and shoes."
         : "Respect requested framing in variation/user prompt and avoid forcing full-body framing when not requested.";
 
-    return `PHOTO SESSION STYLE: ${prompt}\n\nVARIATION INSTRUCTIONS: ${variation}${customPromptBlock}\n\nIMPORTANT: Do NOT invent or change the person's facial expression. Reproduce it exactly as it appears in reference photos. ${framingRule}\n\n${PHYSICAL_REALISM_GUARDRAILS}\n\nThe image must look like a real professional business photo session, not an illustration or passport photo.`;
-}
-
-function extractFirstTextPart(response: unknown): string | null {
-    const responseWithCandidates = response as {
-        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
-    const candidates = responseWithCandidates.candidates;
-    const parts = candidates?.[0]?.content?.parts ?? [];
-    for (const part of parts) {
-        if (typeof part.text === "string" && part.text.trim().length > 0) {
-            return part.text.trim();
-        }
-    }
-    return null;
-}
-
-function parseJsonObjectFromText(text: string): Record<string, unknown> | null {
-    try {
-        const parsed = JSON.parse(text) as unknown;
-        if (parsed && typeof parsed === "object") return parsed as Record<string, unknown>;
-    } catch {
-        // continue
-    }
-
-    const objectMatch = text.match(/\{[\s\S]*\}/);
-    if (!objectMatch) return null;
-
-    try {
-        const parsed = JSON.parse(objectMatch[0]) as unknown;
-        if (parsed && typeof parsed === "object") return parsed as Record<string, unknown>;
-    } catch {
-        return null;
-    }
-
-    return null;
-}
-
-async function validateGeneratedImageQuality(
-    env: Env,
-    imageBase64: string,
-    variation: string
-): Promise<QualityCheckResult | null> {
-    try {
-        const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
-        const response = await ai.models.generateContent({
-            model: "gemini-3.1-flash-image-preview",
-            contents: [{
-                role: "user",
-                parts: [
-                    {
-                        text: `You are a strict photo QA reviewer.
-Review this generated corporate portrait for physical realism and composition integrity.
-
-Variation context: ${variation}
-IMPORTANT: Cropped framing (for example upper-body / do pasa / bust shot) is acceptable.
-Do NOT fail an image just because legs or shoes are outside the frame.
-Evaluate only visible anatomy and visible object relationships.
-
-Fail the image if ANY of these occur:
-- unrealistic object scale/proportions (e.g., chair larger than desk, impossible desk-chair relation),
-- impossible body-furniture contact (floating pose, body intersecting chair/desk),
-- anatomy artifacts (extra limbs/fingers/feet, detached limbs, twisted/unnatural joints),
-- clearly detached limb fragments that look like generation artifacts (not normal crop boundaries).
-
-Return ONLY JSON:
-{"pass": boolean, "severity": "none|low|medium|high", "reasons": ["short reason 1", "short reason 2"]}`,
-                    },
-                    { inlineData: { mimeType: "image/jpeg", data: imageBase64 } },
-                ],
-            }],
-            config: { responseModalities: ["TEXT"] },
-        });
-
-        const text = extractFirstTextPart(response);
-        if (!text) return null;
-
-        const parsed = parseJsonObjectFromText(text);
-        if (!parsed) return null;
-
-        const pass = parsed.pass === true;
-        const severityRaw = typeof parsed.severity === "string" ? parsed.severity.toLowerCase() : "unknown";
-        const severity =
-            severityRaw === "none" || severityRaw === "low" || severityRaw === "medium" || severityRaw === "high"
-                ? severityRaw
-                : "unknown";
-        const reasons = Array.isArray(parsed.reasons)
-            ? parsed.reasons.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-            : [];
-
-        return { pass, severity, reasons };
-    } catch (error) {
-        console.warn(`[QA] Quality validation failed: ${getReadableError(error) || "unknown error"}`);
-        return null;
-    }
+    return `PHOTO SESSION STYLE: ${prompt}\n\nVARIATION INSTRUCTIONS: ${variation}${customPromptBlock}\n\nIMPORTANT: Do NOT invent or change the person's facial expression. Reproduce it exactly as it appears in reference photos. ${identityRule} ${activityRule} ${varietyRule} ${framingRule}\n\n${PHYSICAL_REALISM_GUARDRAILS}\n\nThe image must look like a real professional business photo session, not an illustration or passport photo.`;
 }
 
 async function generateOneImage(
@@ -896,35 +808,11 @@ async function generateOneImage(
         }
     }
 
-    const severityScore = (severity: QualityCheckResult["severity"]): number => {
-        switch (severity) {
-            case "none":
-                return 0;
-            case "low":
-                return 1;
-            case "medium":
-                return 2;
-            case "high":
-                return 3;
-            default:
-                return 2;
-        }
-    };
-
-    let bestCandidateBase64: string | null = null;
-    let bestCandidateScore = Number.POSITIVE_INFINITY;
-    let bestCandidateReasons = "";
-    let retryQualityFeedback = "";
-
     for (let attempt = 1; attempt <= 3; attempt++) {
         console.log(`[Gemini] Calling API for variation ${variation}, attempt ${attempt}/3`);
-        const retryPromptBlock = retryQualityFeedback
-            ? `\n\nRETRY QUALITY CORRECTIONS (MUST FIX): ${retryQualityFeedback}
-Preserve identity and scene consistency while fixing these defects.`
-            : "";
         const requestParts: GeminiPart[] = [
             ...referenceParts,
-            { text: `${finalImagePrompt}${retryPromptBlock}` },
+            { text: finalImagePrompt },
         ];
 
         // Throws on error — allows Workflow to retry the step
@@ -938,44 +826,14 @@ Preserve identity and scene consistency while fixing these defects.`
 
         for (const part of response.candidates?.[0]?.content?.parts ?? []) {
             if (part.inlineData?.data) {
-                const qualityCheck = await validateGeneratedImageQuality(env, part.inlineData.data, variation);
-                if (!qualityCheck || qualityCheck.pass) {
-                    console.log(`[Gemini] Got quality-approved image for variation: ${variation}`);
-                    return part.inlineData.data;
-                }
-
-                const currentScore = severityScore(qualityCheck.severity);
-                if (currentScore < bestCandidateScore) {
-                    bestCandidateBase64 = part.inlineData.data;
-                    bestCandidateScore = currentScore;
-                    bestCandidateReasons = qualityCheck.reasons.slice(0, 3).join("; ");
-                }
-
-                // Low-severity issues should not block the whole workflow.
-                if (qualityCheck.severity === "low") {
-                    console.warn(`[QA] Accepting low-severity image for variation ${variation}: ${qualityCheck.reasons.join("; ")}`);
-                    return part.inlineData.data;
-                }
-
-                const compactReasons = qualityCheck.reasons.slice(0, 3).join("; ");
-                retryQualityFeedback = compactReasons.length > 0
-                    ? compactReasons
-                    : "Fix anatomy, object scale, and body-object contact realism.";
-                console.warn(`[QA] Variation ${variation} rejected on attempt ${attempt}: ${retryQualityFeedback}`);
-                break;
+                console.log(`[Gemini] Got image for variation: ${variation}`);
+                return part.inlineData.data;
             }
         }
 
         if (attempt < 3) {
             await sleep(attempt * 800);
         }
-    }
-
-    if (bestCandidateBase64) {
-        console.warn(
-            `[QA] Falling back to best candidate for variation ${variation}. Severity score=${bestCandidateScore}. Reasons=${bestCandidateReasons || "n/a"}`
-        );
-        return bestCandidateBase64;
     }
 
     throw new Error(`Gemini returned no image for variation: ${variation}`);

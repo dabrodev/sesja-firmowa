@@ -3,7 +3,7 @@
 import { useEffect, useState, use, useCallback } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { sessionService, Photosession, PromptRunTrace } from "@/lib/sessions";
-import { Calendar, ArrowLeft, Loader2, Download, ExternalLink, ImageIcon, PencilLine, Save, X, Trash2, Square } from "lucide-react";
+import { Calendar, ArrowLeft, Loader2, Download, ExternalLink, ImageIcon, PencilLine, Save, X, Trash2, Square, ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -16,11 +16,12 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { PhotoUploader } from "@/components/photo-uploader";
 import type { PhotoAsset } from "@/lib/store";
 import { extractR2KeyFromReference, referenceUrlToPhotoAsset } from "@/lib/reference-assets";
+import { isPresetReference } from "@/lib/preset-assets";
 import { ImageWithPlaceholder } from "@/components/image-with-placeholder";
 import { downloadFile } from "@/lib/download";
 import { assetService } from "@/lib/assets";
@@ -46,6 +47,64 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
     const [deletingResultIndex, setDeletingResultIndex] = useState<number | null>(null);
     const [isDeletingSession, setIsDeletingSession] = useState(false);
     const [isForceStoppingSession, setIsForceStoppingSession] = useState(false);
+    const [selectedResultIndex, setSelectedResultIndex] = useState<number | null>(null);
+
+    const resultCount = session?.results.length ?? 0;
+    const selectedResultUrl = selectedResultIndex !== null ? session?.results[selectedResultIndex] ?? null : null;
+    const hasPrevResult = selectedResultIndex !== null && selectedResultIndex > 0;
+    const hasNextResult = selectedResultIndex !== null && selectedResultIndex < resultCount - 1;
+
+    const closeResultPreview = useCallback(() => {
+        setSelectedResultIndex(null);
+    }, []);
+
+    const showPrevResult = useCallback(() => {
+        setSelectedResultIndex((current) => {
+            if (current === null || current <= 0) return current;
+            return current - 1;
+        });
+    }, []);
+
+    const showNextResult = useCallback(() => {
+        setSelectedResultIndex((current) => {
+            if (current === null || current >= resultCount - 1) return current;
+            return current + 1;
+        });
+    }, [resultCount]);
+
+    useEffect(() => {
+        if (selectedResultIndex === null) return;
+        if (resultCount === 0) {
+            setSelectedResultIndex(null);
+            return;
+        }
+        if (selectedResultIndex > resultCount - 1) {
+            setSelectedResultIndex(resultCount - 1);
+        }
+    }, [resultCount, selectedResultIndex]);
+
+    useEffect(() => {
+        if (selectedResultIndex === null) return;
+
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                closeResultPreview();
+                return;
+            }
+            if (event.key === "ArrowLeft") {
+                event.preventDefault();
+                showPrevResult();
+                return;
+            }
+            if (event.key === "ArrowRight") {
+                event.preventDefault();
+                showNextResult();
+            }
+        };
+
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [closeResultPreview, selectedResultIndex, showNextResult, showPrevResult]);
 
     const parseDeleteError = useCallback((error: unknown): string => {
         if (error instanceof Error && error.message) return error.message;
@@ -291,10 +350,17 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                         return;
                     }
                     const userAssets = await assetService.getAllUserAssets(user.uid);
-                    const validReferences = new Set(userAssets.map((asset) => asset.url));
-                    const sanitizedFaceReferences = data.faceReferences.filter((reference) => validReferences.has(reference));
-                    const sanitizedOfficeReferences = data.officeReferences.filter((reference) => validReferences.has(reference));
-                    const sanitizedOutfitReferences = data.outfitReferences.filter((reference) => validReferences.has(reference));
+                    const validReferenceUrls = new Set(userAssets.map((asset) => asset.url));
+                    const validReferenceKeys = new Set(userAssets.map((asset) => asset.id));
+                    const isKnownReference = (reference: string) => {
+                        if (isPresetReference(reference)) return true;
+                        if (validReferenceUrls.has(reference)) return true;
+                        const key = extractR2KeyFromReference(reference);
+                        return Boolean(key && validReferenceKeys.has(key));
+                    };
+                    const sanitizedFaceReferences = data.faceReferences.filter((reference) => isKnownReference(reference));
+                    const sanitizedOfficeReferences = data.officeReferences.filter((reference) => isKnownReference(reference));
+                    const sanitizedOutfitReferences = data.outfitReferences.filter((reference) => isKnownReference(reference));
                     const hasReferenceMismatch =
                         sanitizedFaceReferences.length !== data.faceReferences.length ||
                         sanitizedOfficeReferences.length !== data.officeReferences.length ||
@@ -666,7 +732,8 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                         initial={{ opacity: 0, y: 20 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         transition={{ delay: i * 0.1 }}
-                                        className="group relative rounded-2xl overflow-hidden border border-white/10 bg-zinc-900 aspect-[3/4]"
+                                        className="group relative rounded-2xl overflow-hidden border border-white/10 bg-zinc-900 aspect-[3/4] cursor-zoom-in"
+                                        onClick={() => setSelectedResultIndex(i)}
                                     >
                                         <ImageWithPlaceholder
                                             src={url}
@@ -680,7 +747,10 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                             <div className="flex gap-2 w-full">
                                                 <Button
                                                     className="flex-1 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-900/50"
-                                                    onClick={() => handleDownload(url, i)}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        void handleDownload(url, i);
+                                                    }}
                                                 >
                                                     <Download className="mr-2 h-4 w-4" /> Pobierz HD
                                                 </Button>
@@ -688,7 +758,10 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                                     variant="secondary"
                                                     size="icon"
                                                     className="bg-white/20 hover:bg-white/30 text-white backdrop-blur-md"
-                                                    onClick={() => window.open(url, "_blank")}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        window.open(url, "_blank");
+                                                    }}
                                                 >
                                                     <ExternalLink className="h-4 w-4" />
                                                 </Button>
@@ -696,7 +769,10 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                                     variant="secondary"
                                                     size="icon"
                                                     className="bg-red-600/80 hover:bg-red-500 text-white backdrop-blur-md"
-                                                    onClick={() => void handleDeleteResult(i)}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        void handleDeleteResult(i);
+                                                    }}
                                                     disabled={deletingResultIndex === i || session.status === "processing" || isDeletingSession}
                                                 >
                                                     {deletingResultIndex === i ? (
@@ -994,6 +1070,73 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                     </div>
                 </div>
             </main>
+
+            <AnimatePresence>
+                {selectedResultUrl && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={closeResultPreview}
+                        className="fixed inset-0 z-[100] bg-black/70 p-4 backdrop-blur-sm md:p-6"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={`Podgląd zdjęcia ${Math.max(1, (selectedResultIndex ?? 0) + 1)} z ${Math.max(1, resultCount)}`}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="relative mx-auto flex h-full w-full max-w-5xl items-center justify-center rounded-2xl border border-white/10 bg-zinc-950/90 p-4 shadow-2xl md:p-6"
+                        >
+                            <Button
+                                size="icon"
+                                variant="secondary"
+                                onClick={closeResultPreview}
+                                className="absolute right-3 top-3 z-20 rounded-full border border-white/20 bg-black/60 text-white hover:bg-black/80"
+                                aria-label="Zamknij podgląd"
+                            >
+                                <X className="h-4 w-4" />
+                            </Button>
+
+                            {resultCount > 1 ? (
+                                <>
+                                    <Button
+                                        size="icon"
+                                        variant="secondary"
+                                        onClick={showPrevResult}
+                                        disabled={!hasPrevResult}
+                                        className="absolute left-3 top-1/2 z-20 -translate-y-1/2 rounded-full border border-white/20 bg-black/60 text-white hover:bg-black/80 disabled:opacity-30"
+                                        aria-label="Poprzednie zdjęcie"
+                                    >
+                                        <ChevronLeft className="h-5 w-5" />
+                                    </Button>
+                                    <Button
+                                        size="icon"
+                                        variant="secondary"
+                                        onClick={showNextResult}
+                                        disabled={!hasNextResult}
+                                        className="absolute right-3 top-1/2 z-20 -translate-y-1/2 rounded-full border border-white/20 bg-black/60 text-white hover:bg-black/80 disabled:opacity-30"
+                                        aria-label="Następne zdjęcie"
+                                    >
+                                        <ChevronRight className="h-5 w-5" />
+                                    </Button>
+                                    <div className="absolute bottom-3 left-1/2 z-20 -translate-x-1/2 rounded-full border border-white/15 bg-black/60 px-3 py-1 text-xs text-white">
+                                        {(selectedResultIndex ?? 0) + 1} / {resultCount}
+                                    </div>
+                                </>
+                            ) : null}
+
+                            <motion.img
+                                src={selectedResultUrl}
+                                alt="Powiększone zdjęcie"
+                                className="max-h-[86vh] max-w-full rounded-xl object-contain shadow-2xl"
+                            />
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

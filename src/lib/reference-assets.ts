@@ -1,7 +1,13 @@
 import type { PhotoAsset } from "./store";
+import { getPresetAssetByReference } from "./preset-assets";
 
 export function extractR2KeyFromReference(reference: string): string | null {
     if (!reference) return null;
+
+    const presetAsset = getPresetAssetByReference(reference);
+    if (presetAsset) {
+        return presetAsset.id;
+    }
 
     // Support legacy/raw key values stored directly without full URL.
     if (!reference.includes("://")) {
@@ -22,6 +28,11 @@ export function referenceUrlToPhotoAsset(
     index: number,
     type: "face" | "office" | "outfit"
 ): PhotoAsset {
+    const presetAsset = getPresetAssetByReference(reference);
+    if (presetAsset) {
+        return presetAsset;
+    }
+
     const key = extractR2KeyFromReference(reference);
     const filename = key?.split("/").pop() || `${type}-reference-${index + 1}.jpg`;
 

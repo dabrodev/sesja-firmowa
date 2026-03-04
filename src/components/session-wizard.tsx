@@ -22,7 +22,8 @@ import { userService } from "@/lib/users";
 import { assetService } from "@/lib/assets";
 import { cn } from "@/lib/utils";
 import { CopyPlus } from "lucide-react";
-import { referenceUrlToPhotoAsset } from "@/lib/reference-assets";
+import { extractR2KeyFromReference, referenceUrlToPhotoAsset } from "@/lib/reference-assets";
+import { isPresetReference } from "@/lib/preset-assets";
 import Link from "next/link";
 import { PresetSelector, PRESET_OFFICES, PRESET_OUTFITS } from "@/components/preset-selector";
 
@@ -103,10 +104,18 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                 if (!data || data.userId !== user.uid) return;
 
                 const userAssets = await assetService.getAllUserAssets(user.uid);
-                const validReferences = new Set(userAssets.map((asset) => asset.url));
-                const sanitizedFaceReferences = data.faceReferences.filter((reference) => validReferences.has(reference));
-                const sanitizedOfficeReferences = data.officeReferences.filter((reference) => validReferences.has(reference));
-                const sanitizedOutfitReferences = data.outfitReferences.filter((reference) => validReferences.has(reference));
+                const validReferenceUrls = new Set(userAssets.map((asset) => asset.url));
+                const validReferenceKeys = new Set(userAssets.map((asset) => asset.id));
+                const isKnownReference = (reference: string) => {
+                    if (isPresetReference(reference)) return true;
+                    if (validReferenceUrls.has(reference)) return true;
+                    const key = extractR2KeyFromReference(reference);
+                    return Boolean(key && validReferenceKeys.has(key));
+                };
+
+                const sanitizedFaceReferences = data.faceReferences.filter((reference) => isKnownReference(reference));
+                const sanitizedOfficeReferences = data.officeReferences.filter((reference) => isKnownReference(reference));
+                const sanitizedOutfitReferences = data.outfitReferences.filter((reference) => isKnownReference(reference));
                 const hasReferenceMismatch =
                     sanitizedFaceReferences.length !== data.faceReferences.length ||
                     sanitizedOfficeReferences.length !== data.officeReferences.length ||

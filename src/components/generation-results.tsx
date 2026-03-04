@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Download, Share2, CheckCircle2 } from "lucide-react";
+import { Download, Share2, CheckCircle2, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAppStore } from "@/lib/store";
 import { useRouter } from "next/navigation";
@@ -17,7 +17,57 @@ interface GenerationResultsProps {
 export function GenerationResults({ sessionId, resultUrls = [], expectedCount = 4 }: GenerationResultsProps) {
     const { resetSession } = useAppStore();
     const router = useRouter();
-    const [selectedImage, setSelectedImage] = useState<string | null>(null);
+    const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+
+    const availableIndices = useMemo(
+        () =>
+            resultUrls.reduce<number[]>((acc, url, index) => {
+                if (url) acc.push(index);
+                return acc;
+            }, []),
+        [resultUrls]
+    );
+    const currentPosition = selectedIndex !== null ? availableIndices.indexOf(selectedIndex) : -1;
+    const currentImage = selectedIndex !== null ? resultUrls[selectedIndex] ?? null : null;
+    const hasPrev = currentPosition > 0;
+    const hasNext = currentPosition >= 0 && currentPosition < availableIndices.length - 1;
+
+    const closeLightbox = useCallback(() => {
+        setSelectedIndex(null);
+    }, []);
+
+    const goPrev = useCallback(() => {
+        if (!hasPrev) return;
+        setSelectedIndex(availableIndices[currentPosition - 1]);
+    }, [availableIndices, currentPosition, hasPrev]);
+
+    const goNext = useCallback(() => {
+        if (!hasNext) return;
+        setSelectedIndex(availableIndices[currentPosition + 1]);
+    }, [availableIndices, currentPosition, hasNext]);
+
+    useEffect(() => {
+        if (selectedIndex === null) return;
+
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                closeLightbox();
+                return;
+            }
+            if (event.key === "ArrowLeft") {
+                event.preventDefault();
+                goPrev();
+                return;
+            }
+            if (event.key === "ArrowRight") {
+                event.preventDefault();
+                goNext();
+            }
+        };
+
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [closeLightbox, goNext, goPrev, selectedIndex]);
 
     const handleDownload = async (url: string, index: number) => {
         try {
@@ -66,7 +116,7 @@ export function GenerationResults({ sessionId, resultUrls = [], expectedCount = 
                             animate={{ opacity: 1, scale: 1 }}
                             transition={{ delay: 0.1 }}
                             className="group relative aspect-[3/4] overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 shadow-2xl cursor-pointer"
-                            onClick={() => setSelectedImage(url)}
+                            onClick={() => setSelectedIndex(i)}
                         >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
@@ -117,22 +167,68 @@ export function GenerationResults({ sessionId, resultUrls = [], expectedCount = 
 
             {/* Lightbox */}
             <AnimatePresence>
-                {selectedImage && (
+                {currentImage && (
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        onClick={() => setSelectedImage(null)}
-                        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 p-4 backdrop-blur-md cursor-zoom-out"
+                        onClick={closeLightbox}
+                        className="fixed inset-0 z-[100] bg-black/70 p-4 backdrop-blur-sm md:p-6"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={`Podgląd zdjęcia ${Math.max(1, currentPosition + 1)} z ${Math.max(1, availableIndices.length)}`}
                     >
-                        <motion.img
+                        <motion.div
                             initial={{ scale: 0.9, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.9, opacity: 0 }}
-                            src={selectedImage}
-                            alt="Powiększone zdjęcie"
-                            className="max-h-[90vh] max-w-full rounded-2xl shadow-2xl"
-                        />
+                            onClick={(e) => e.stopPropagation()}
+                            className="relative mx-auto flex h-full w-full max-w-5xl items-center justify-center rounded-2xl border border-white/10 bg-zinc-950/90 p-4 shadow-2xl md:p-6"
+                        >
+                            <Button
+                                size="icon"
+                                variant="secondary"
+                                onClick={closeLightbox}
+                                className="absolute right-3 top-3 z-20 rounded-full border border-white/20 bg-black/60 text-white hover:bg-black/80"
+                                aria-label="Zamknij podgląd"
+                            >
+                                <X className="h-4 w-4" />
+                            </Button>
+
+                            {availableIndices.length > 1 && (
+                                <>
+                                    <Button
+                                        size="icon"
+                                        variant="secondary"
+                                        onClick={goPrev}
+                                        disabled={!hasPrev}
+                                        className="absolute left-3 top-1/2 z-20 -translate-y-1/2 rounded-full border border-white/20 bg-black/60 text-white hover:bg-black/80 disabled:opacity-30"
+                                        aria-label="Poprzednie zdjęcie"
+                                    >
+                                        <ChevronLeft className="h-5 w-5" />
+                                    </Button>
+                                    <Button
+                                        size="icon"
+                                        variant="secondary"
+                                        onClick={goNext}
+                                        disabled={!hasNext}
+                                        className="absolute right-3 top-1/2 z-20 -translate-y-1/2 rounded-full border border-white/20 bg-black/60 text-white hover:bg-black/80 disabled:opacity-30"
+                                        aria-label="Następne zdjęcie"
+                                    >
+                                        <ChevronRight className="h-5 w-5" />
+                                    </Button>
+                                    <div className="absolute bottom-3 left-1/2 z-20 -translate-x-1/2 rounded-full border border-white/15 bg-black/60 px-3 py-1 text-xs text-white">
+                                        {currentPosition + 1} / {availableIndices.length}
+                                    </div>
+                                </>
+                            )}
+
+                            <motion.img
+                                src={currentImage}
+                                alt="Powiększone zdjęcie"
+                                className="max-h-[86vh] max-w-full rounded-xl object-contain shadow-2xl"
+                            />
+                        </motion.div>
                     </motion.div>
                 )}
             </AnimatePresence>
