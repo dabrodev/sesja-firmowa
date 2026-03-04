@@ -183,7 +183,7 @@ export function GenerationResults({ sessionId, resultUrls = [], expectedCount = 
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.9, opacity: 0 }}
                             onClick={(e) => e.stopPropagation()}
-                            className="relative mx-auto flex h-full w-full max-w-5xl items-center justify-center rounded-2xl border border-white/10 bg-zinc-950/90 p-4 shadow-2xl md:p-6"
+                            className="relative mx-auto flex max-h-[92vh] w-auto max-w-[95vw] items-center justify-center rounded-2xl border border-white/10 bg-zinc-950/90 p-2 shadow-2xl md:p-3"
                         >
                             <Button
                                 size="icon"
@@ -226,7 +226,7 @@ export function GenerationResults({ sessionId, resultUrls = [], expectedCount = 
                             <motion.img
                                 src={currentImage}
                                 alt="Powiększone zdjęcie"
-                                className="max-h-[86vh] max-w-full rounded-xl object-contain shadow-2xl"
+                                className="max-h-[86vh] max-w-[92vw] rounded-xl object-contain shadow-2xl"
                             />
                         </motion.div>
                     </motion.div>
