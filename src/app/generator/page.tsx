@@ -30,9 +30,11 @@ import { Suspense } from "react";
 function WizardWrapper() {
     const searchParams = useSearchParams();
     const sessionId = searchParams.get("sessionId") || undefined;
+    const newSessionToken = searchParams.get("new") || "default";
     const router = useRouter();
     const { user } = useAuth();
     const [sessionName, setSessionName] = useState<{ sessionId: string; name: string | null } | null>(null);
+    const wizardKey = sessionId ? `session-${sessionId}` : `new-${newSessionToken}`;
 
     useEffect(() => {
         let active = true;
@@ -82,7 +84,11 @@ function WizardWrapper() {
                     </p>
                 )}
             </div>
-            <SessionWizard sessionId={sessionId} onNewSessionRequested={() => router.replace("/generator")} />
+            <SessionWizard
+                key={wizardKey}
+                sessionId={sessionId}
+                onNewSessionRequested={() => router.replace(`/generator?new=${Date.now()}`)}
+            />
         </div>
     );
 }

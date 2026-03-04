@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { User } from "firebase/auth";
 import type { UserProfile } from "@/lib/users";
+import { useAppStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,6 +43,17 @@ const isRouteActive = (pathname: string, href: string): boolean => {
 export function AppHeader({ user, userProfile, loading = false, onLogout, sticky = false, fixed = false }: AppHeaderProps) {
     const pathname = usePathname();
     const router = useRouter();
+    const resetSession = useAppStore((state) => state.resetSession);
+
+    const handleNewSessionClick = () => {
+        resetSession();
+        const target = `/generator?new=${Date.now()}`;
+        if (pathname === "/generator") {
+            router.replace(target);
+            return;
+        }
+        router.push(target);
+    };
 
     const secondaryButtonClass = (active: boolean) => cn(
         "border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white",
@@ -88,18 +100,17 @@ export function AppHeader({ user, userProfile, loading = false, onLogout, sticky
                         })}
                     </nav>
 
-                    <Link href="/generator">
-                        <Button
-                            size="sm"
-                            className={cn(
-                                "h-9 whitespace-nowrap bg-gradient-to-r from-blue-600 to-indigo-600 px-3 text-white shadow-lg shadow-blue-500/20 hover:from-blue-500 hover:to-indigo-500 sm:px-4",
-                                isRouteActive(pathname, "/generator") ? "ring-2 ring-blue-300/40" : ""
-                            )}
-                        >
-                            <Plus className="mr-2 h-4 w-4" />
-                            Nowa sesja
-                        </Button>
-                    </Link>
+                    <Button
+                        size="sm"
+                        className={cn(
+                            "h-9 whitespace-nowrap bg-gradient-to-r from-blue-600 to-indigo-600 px-3 text-white shadow-lg shadow-blue-500/20 hover:from-blue-500 hover:to-indigo-500 sm:px-4",
+                            isRouteActive(pathname, "/generator") ? "ring-2 ring-blue-300/40" : ""
+                        )}
+                        onClick={handleNewSessionClick}
+                    >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Nowa sesja
+                    </Button>
 
                     {loading ? (
                         <div className="h-9 w-9 animate-pulse rounded-full bg-white/5" />
@@ -126,8 +137,11 @@ export function AppHeader({ user, userProfile, loading = false, onLogout, sticky
                                 <DropdownMenuItem className="cursor-pointer focus:bg-white/5 focus:text-white" asChild>
                                     <Link href="/sesje">moje sesje</Link>
                                 </DropdownMenuItem>
-                                <DropdownMenuItem className="cursor-pointer focus:bg-white/5 focus:text-white" asChild>
-                                    <Link href="/generator">nowa sesja</Link>
+                                <DropdownMenuItem
+                                    className="cursor-pointer focus:bg-white/5 focus:text-white"
+                                    onClick={handleNewSessionClick}
+                                >
+                                    nowa sesja
                                 </DropdownMenuItem>
                                 <DropdownMenuItem className="cursor-pointer focus:bg-white/5 focus:text-white" asChild>
                                     <Link href="/wolny-generator">generator pojedynczego zdjęcia</Link>
