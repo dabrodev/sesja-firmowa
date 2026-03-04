@@ -24,6 +24,8 @@ import { cn } from "@/lib/utils";
 import { CopyPlus } from "lucide-react";
 import { referenceUrlToPhotoAsset } from "@/lib/reference-assets";
 import Link from "next/link";
+import { PresetSelector, PRESET_OFFICES, PRESET_OUTFITS } from "@/components/preset-selector";
+
 
 type WizardStepId = "face" | "office" | "generate";
 const COST_PER_PHOTO = 30;
@@ -251,19 +253,48 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                 exit={{ opacity: 0, x: -20 }}
                                 className="space-y-8"
                             >
+                                <PresetSelector
+                                    title="Przykładowe lokalizacje"
+                                    description="Nie masz własnego zdjęcia biura? Wybierz jedno z naszych przygotowanych wnętrz."
+                                    presets={PRESET_OFFICES}
+                                    selectedAssets={officeAssets}
+                                    onSelect={(asset) => {
+                                        // Keep max 1 office by clearing existing user-uploaded if they pick preset
+                                        // or clearing preset if they pick another preset
+                                        officeAssets.forEach(a => removeOfficeReference(a.id));
+                                        addOfficeReference(asset);
+                                    }}
+                                    onDeselect={removeOfficeReference}
+                                    multiple={false}
+                                />
                                 <PhotoUploader
-                                    title="Twoje lokalizacje"
-                                    description="Wgraj jedno zdjęcie biura lub wybierz jedno z naszych wnętrz. Używamy jednej lokacji, aby uniknąć miksowania pomieszczeń."
+                                    title="Własne lokalizacje"
+                                    description="Wgraj własne zdjęcie biura. Używamy jednej lokacji, aby uniknąć miksowania pomieszczeń."
                                     assets={officeAssets}
-                                    onUpload={addOfficeReference}
+                                    onUpload={(asset) => {
+                                        // Keep max 1 office
+                                        officeAssets.forEach(a => removeOfficeReference(a.id));
+                                        addOfficeReference(asset);
+                                    }}
                                     onRemove={removeOfficeReference}
                                     maxFiles={1}
                                     userId={user.uid}
                                     assetType="office"
                                 />
+                                <PresetSelector
+                                    title="Przykładowe stylizacje (opcjonalnie)"
+                                    description="Wybierz styl, który najbardziej pasuje do klimatu zdjęć."
+                                    presets={PRESET_OUTFITS}
+                                    selectedAssets={outfitAssets}
+                                    onSelect={addOutfitReference}
+                                    onDeselect={removeOutfitReference}
+                                    multiple={true}
+                                    showGenderFilter={true}
+                                />
                                 <PhotoUploader
-                                    title="Referencje ubioru (opcjonalnie)"
-                                    description="Dodaj zdjęcia ubrań lub stylizacji (np. koszula, spodnie, spódnica), aby AI trzymało spójny dress code."
+                                    title="Własne referencje ubioru (opcjonalnie)"
+                                    description="Dodaj własne zdjęcia ubrań lub stylizacji (np. koszula, spodnie, spódnica), aby AI docelowo wygenerowało taki strój."
+
                                     assets={outfitAssets}
                                     onUpload={addOutfitReference}
                                     onRemove={removeOutfitReference}
