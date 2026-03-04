@@ -757,6 +757,18 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                                 <Button
                                                     variant="secondary"
                                                     size="icon"
+                                                    className="bg-emerald-600/80 hover:bg-emerald-500 text-white backdrop-blur-md"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        router.push(`/wolny-generator?edit=${encodeURIComponent(url)}`);
+                                                    }}
+                                                    title="Edytuj to zdjęcie"
+                                                >
+                                                    <PencilLine className="h-4 w-4" />
+                                                </Button>
+                                                <Button
+                                                    variant="secondary"
+                                                    size="icon"
                                                     className="bg-white/20 hover:bg-white/30 text-white backdrop-blur-md"
                                                     onClick={(e) => {
                                                         e.stopPropagation();

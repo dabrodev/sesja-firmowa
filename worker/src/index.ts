@@ -116,12 +116,12 @@ const DEFAULT_VARIATIONS = [
     "Scene: person moving through office corridor while engaged in work context (e.g., carrying documents or heading to a meeting), natural motion freeze, business editorial framing. Maintain their EXACT natural facial expression from the reference photos.",
 ];
 
-const OUTFIT_PRIORITY_VARIATIONS = [
-    "Scene: person working while standing at a desk or high table in their office (e.g., reviewing documents, taking notes). Use medium-wide candid framing so most of the outfit is visible naturally. Maintain their EXACT natural facial expression from the reference photos — do not alter it.",
-    "Scene: side close-up (one-sided framing) of person working at laptop, typing, or checking key document details. Keep hands and tools naturally involved in work. Maintain their EXACT natural facial expression from the reference photos.",
-    "Scene: top-down perspective (slightly from above) of person organizing documents/notebook/tablet at desk, authentic workflow moment. Keep outfit cues visible where natural without forcing full body. Maintain their EXACT natural facial expression from the reference photos.",
-    "Scene: low-angle perspective (slightly from below) of person in active work conversation or presenting near workspace, engaged posture. Keep framing candid and functional, not posed. Maintain their EXACT natural facial expression from the reference photos.",
-    "Scene: person moving through office corridor while engaged in work context (e.g., carrying documents or heading to a meeting), documentary-style motion freeze. Use full-body framing from head to shoes so entire silhouette and shoes are visible. Maintain their EXACT natural facial expression from the reference photos.",
+const EXPLICIT_WIDE_FRAMING_VARIATIONS = [
+    "Scene: person working while standing at a desk or high table in their office (e.g., reviewing documents, taking notes). Use wider candid framing (prefer 7/8 to full-body when physically possible) while keeping natural work activity. Maintain their EXACT natural facial expression from the reference photos — do not alter it.",
+    "Scene: person working at laptop or reviewing documents, side angle. Use wider side framing that shows most or all of the silhouette when physically possible, without fashion-style posing. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: top-down perspective (slightly from above) of person organizing documents/notebook/tablet at desk. Keep a wider composition that captures clear full posture in context. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: low-angle perspective (slightly from below) of person in active work conversation or presenting near workspace. Use medium-wide to wide framing that preserves body context naturally. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: person moving through office corridor while engaged in work context (e.g., carrying documents or heading to a meeting), documentary-style motion freeze. Use full-body framing whenever physically possible, still candid and work-focused. Maintain their EXACT natural facial expression from the reference photos.",
 ];
 
 function normalizeRequestedCount(value: number | undefined): number {
@@ -129,37 +129,34 @@ function normalizeRequestedCount(value: number | undefined): number {
     return Math.min(5, Math.max(1, Math.round(value)));
 }
 
-function shouldPrioritizeOutfit(customPrompt: string, outfitCount: number): boolean {
+function shouldPrioritizeOutfit(customPrompt: string): boolean {
     const normalized = customPrompt.toLowerCase();
-    const closeFramingRequested = [
-        "close-up",
-        "close up",
-        "headshot",
-        "portrait",
-        "portret",
-        "zbliżenie",
-        "zblizenie",
-        "do pasa",
-        "bust shot",
-        "tight frame",
-    ].some((keyword) => normalized.includes(keyword));
-
-    if (closeFramingRequested) {
-        return false;
-    }
+    if (!normalized.trim()) return false;
 
     return [
-        "ubiór",
-        "ubran",
-        "styliz",
-        "but",
-        "shoes",
-        "outfit",
+        "wide shot",
+        "wider framing",
+        "wider shot",
         "full body",
+        "full-body",
+        "whole body",
+        "head to toe",
+        "head-to-toe",
+        "from head to toe",
+        "szeroki kadr",
+        "szerokie ujęcie",
+        "szerokie ujecie",
+        "pełna sylwetka",
         "pelna sylwetka",
+        "cała sylwetka",
+        "cala sylwetka",
         "cała postać",
         "cala postac",
-    ].some((keyword) => normalized.includes(keyword)) || outfitCount > 0;
+        "plan pełny",
+        "plan pelny",
+        "pokaz buty",
+        "show shoes",
+    ].some((keyword) => normalized.includes(keyword));
 }
 
 function buildWorkflowInstanceId(sessionId: string, runId: string): string {
@@ -190,7 +187,7 @@ export class GenerationWorkflow extends WorkflowEntrypoint<Env, GenerateParams> 
         } = event.payload;
         const safeRequestedCount = normalizeRequestedCount(requestedCount);
         const safeRunId = runId?.trim() || Date.now().toString();
-        const prioritizeOutfit = shouldPrioritizeOutfit(customPrompt, outfitKeys.length);
+        const prioritizeOutfit = shouldPrioritizeOutfit(customPrompt);
 
         // Step 1: Generate a tailored prompt using Azure OpenAI
         const prompt = await step.do("generate-prompt", {
@@ -211,7 +208,7 @@ export class GenerationWorkflow extends WorkflowEntrypoint<Env, GenerateParams> 
 
         // Generate requested number of variations (1-5)
         const variationPool = prioritizeOutfit
-            ? OUTFIT_PRIORITY_VARIATIONS
+            ? EXPLICIT_WIDE_FRAMING_VARIATIONS
             : DEFAULT_VARIATIONS;
         const variations = variationPool.slice(0, safeRequestedCount);
         const imagePrompts = variations.map((variation, index) => ({
@@ -691,8 +688,8 @@ Generate a photorealistic corporate photo prompt (2-3 sentences) with these requ
 - The result must be suitable for LinkedIn, press materials, and company websites
 - Allow varied camera framing and perspective across the set (side close-up, top-down, low-angle, medium, wider) while keeping realism
 ${prioritizeOutfit
-        ? "- When outfit guidance is present, keep varied framings; ensure at least one natural shot shows full silhouette and shoes, but do not force all shots to be wide"
-        : "- Keep framing natural to the scene; do NOT force full-body framing when it is not requested"}
+        ? "- USER explicitly requested wider/full-body framing: apply wider framing while keeping candid work activity and realism"
+        : "- Default framing: natural medium/close work framing; do NOT force wide/full-body shots unless user explicitly requests it"}
 ${customPromptText
         ? `- USER PRIORITY (highest priority creative direction): ${customPromptText}
 - If USER PRIORITY specifies framing/styling, follow it unless it conflicts with identity, office consistency, or realistic work activity`
@@ -732,8 +729,8 @@ function getDefaultPrompt(customPrompt: string, prioritizeOutfit: boolean): stri
     const varietyLine =
         "Allow natural variety in camera perspective and framing (side close-up, top-down, low-angle, medium, wider) according to scene context.";
     const framingLine = prioritizeOutfit
-        ? "Keep mixed framings; include at least one natural shot where full silhouette and shoes are visible, without forcing every shot to be wide."
-        : "Keep composition natural to the scene and avoid forcing full-body framing unless explicitly requested.";
+        ? "User explicitly requested wider/full-body framing: apply wider composition while keeping candid work behavior and realism."
+        : "Default to natural medium/close work framing and avoid forced wide/full-body framing unless explicitly requested.";
     const customLine = trimmedCustomPrompt
         ? `Primary user direction (highest priority): ${trimmedCustomPrompt}.`
         : "No extra user direction was provided; choose a clean, natural business composition.";
@@ -767,8 +764,8 @@ function buildFinalImagePrompt(
     const identityRule =
         "Highest priority: keep exact same face identity as references (face geometry, eyes, nose, jawline, skin tone, hairline).";
     const framingRule = prioritizeOutfit
-        ? "Do not force all shots to be wide; when feasible in this variation, include natural visibility of outfit details, and ensure at least one shot in the set can show full silhouette and shoes."
-        : "Respect requested framing in variation/user prompt and avoid forcing full-body framing when not requested.";
+        ? "User explicitly requested wider/full-body framing for this run. Apply wider framing for this variation while preserving natural, work-focused activity."
+        : "Default to natural medium/close framing for this variation; avoid forced wide/full-body framing unless explicitly requested in user prompt.";
 
     return `PHOTO SESSION STYLE: ${prompt}\n\nVARIATION INSTRUCTIONS: ${variation}${customPromptBlock}\n\nIMPORTANT: Do NOT invent or change the person's facial expression. Reproduce it exactly as it appears in reference photos. ${identityRule} ${activityRule} ${varietyRule} ${framingRule}\n\n${PHYSICAL_REALISM_GUARDRAILS}\n\nThe image must look like a real professional business photo session, not an illustration or passport photo.`;
 }
