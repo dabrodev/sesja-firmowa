@@ -27,6 +27,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Cloudflare Worker URL not configured" }, { status: 500 });
         }
 
+        // Worker endpoint archives file under archived/* and then removes original key.
         const workerResp = await fetch(`${workerUrl}/delete`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },

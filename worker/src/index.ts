@@ -168,6 +168,12 @@ function buildWorkflowInstanceId(sessionId: string, runId: string): string {
     return `${safeSessionId}-${safeRunId}-${crypto.randomUUID()}`;
 }
 
+function buildArchivedKey(key: string): string {
+    const dayStamp = new Date().toISOString().slice(0, 10);
+    const safeKey = key.replace(/^\/+/, "");
+    return `archived/${dayStamp}/${Date.now()}-${crypto.randomUUID()}-${safeKey}`;
+}
+
 // ─── Cloudflare Workflow ──────────────────────────────────────────────────────
 
 export class GenerationWorkflow extends WorkflowEntrypoint<Env, GenerateParams> {
@@ -593,9 +599,27 @@ async function handleDeleteFile(request: Request, env: Env): Promise<Response> {
             });
         }
 
+        const object = await env.MEDIA_BUCKET.get(key);
+        if (!object) {
+            return new Response(JSON.stringify({ success: true, key, archived: false, reason: "not_found" }), {
+                status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+            });
+        }
+
+        const archivedKey = buildArchivedKey(key);
+        const customMetadata = {
+            ...(object.customMetadata ?? {}),
+            archivedFrom: key,
+            archivedAt: new Date().toISOString(),
+        };
+
+        await env.MEDIA_BUCKET.put(archivedKey, object.body, {
+            httpMetadata: object.httpMetadata,
+            customMetadata,
+        });
         await env.MEDIA_BUCKET.delete(key);
 
-        return new Response(JSON.stringify({ success: true, key }), {
+        return new Response(JSON.stringify({ success: true, key, archived: true, archivedKey }), {
             status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
         });
     } catch (error: unknown) {
