@@ -760,6 +760,22 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                 <p className="text-zinc-500 text-sm animate-pulse tracking-wide uppercase">{generationStatus}</p>
                                             </div>
                                         </div>
+                                        <div className="mx-auto w-full max-w-2xl rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-emerald-100">
+                                            Generowanie działa w tle. Możesz wyjść z generatora, a gotowe zdjęcia będą automatycznie pojawiać się w sesji.
+                                            {sessionId ? (
+                                                <div className="mt-3">
+                                                    <Link href={`/sesje/${sessionId}`}>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="border-emerald-300/30 bg-emerald-900/20 text-emerald-100 hover:bg-emerald-900/40 hover:text-emerald-50"
+                                                        >
+                                                            Przejdź do sesji (generowanie w tle)
+                                                        </Button>
+                                                    </Link>
+                                                </div>
+                                            ) : null}
+                                        </div>
                                     </div>
                                 ) : null}
 
