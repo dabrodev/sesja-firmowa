@@ -454,6 +454,7 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                     if (!user) return;
                                                     if (!hasEnoughCredits) return;
                                                     const cost = requestedCount * COST_PER_PHOTO;
+                                                    const isContinuationRun = Boolean(sessionId);
 
                                                     setIsGenerating(true);
                                                     setHasCompleted(false);
@@ -462,6 +463,10 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                     setGenerationError(null);
 
                                                     let activeSessionId: string | null = sessionId;
+                                                    let activeWorkflowInstanceId: string | null = null;
+                                                    let activeWorkflowRunId: string | null = null;
+                                                    let latestObservedUrls: string[] = [];
+                                                    let lastPersistedObservedCount = 0;
                                                     try {
                                                         const trimmedPrompt = customPrompt.trim();
                                                         const sessionUpdatePayload = {
@@ -494,6 +499,7 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
 
                                                         setGenerationStatus("Uruchamiam workflow...");
                                                         const runId = `${Date.now()}-${Math.round(Math.random() * 10_000)}`;
+                                                        activeWorkflowRunId = runId;
                                                         const resp = await fetch("/api/generate", {
                                                             method: "POST",
                                                             headers: { "Content-Type": "application/json" },
@@ -515,6 +521,7 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                         }
 
                                                         const { instanceId } = await resp.json() as { instanceId: string };
+                                                        activeWorkflowInstanceId = instanceId;
                                                         await sessionService.updateSession(persistedSessionId, {
                                                             activeWorkflowInstanceId: instanceId,
                                                             activeWorkflowRunId: runId,
@@ -524,7 +531,10 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                         const maxAttempts = 120;
 
                                                         await new Promise<void>((resolve, reject) => {
+                                                            let pollInFlight = false;
                                                             const poll = setInterval(async () => {
+                                                                if (pollInFlight) return;
+                                                                pollInFlight = true;
                                                                 attempts++;
                                                                 try {
                                                                     const sr = await fetch(
@@ -546,16 +556,40 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
 
                                                                     if (data.output?.resultUrls?.length) {
                                                                         const urls = data.output.resultUrls;
+                                                                        latestObservedUrls = urls;
                                                                         setResultUrls(urls);
                                                                         if (!hasCompleted) {
                                                                             setHasCompleted(true);
+                                                                        }
+
+                                                                        if (urls.length > lastPersistedObservedCount) {
+                                                                            if (isContinuationRun) {
+                                                                                await sessionService.appendResults(persistedSessionId, urls);
+                                                                                await sessionService.updateSession(persistedSessionId, {
+                                                                                    status: "processing",
+                                                                                    activeWorkflowInstanceId: instanceId,
+                                                                                    activeWorkflowRunId: runId,
+                                                                                });
+                                                                            } else {
+                                                                                await sessionService.updateSession(persistedSessionId, {
+                                                                                    results: urls,
+                                                                                    status: "processing",
+                                                                                    activeWorkflowInstanceId: instanceId,
+                                                                                    activeWorkflowRunId: runId,
+                                                                                });
+                                                                            }
+                                                                            lastPersistedObservedCount = urls.length;
                                                                         }
                                                                     }
 
                                                                     if (data.status === "complete") {
                                                                         clearInterval(poll);
-                                                                        if (sessionId) {
-                                                                            await sessionService.appendResults(persistedSessionId, data.output?.resultUrls || []);
+                                                                        const finalUrls =
+                                                                            data.output?.resultUrls?.length
+                                                                                ? data.output.resultUrls
+                                                                                : latestObservedUrls;
+                                                                        if (isContinuationRun) {
+                                                                            await sessionService.appendResults(persistedSessionId, finalUrls);
                                                                             await sessionService.updateSession(persistedSessionId, {
                                                                                 status: "completed",
                                                                                 activeWorkflowInstanceId: null,
@@ -563,7 +597,7 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                                             });
                                                                         } else {
                                                                             await sessionService.updateSession(persistedSessionId, {
-                                                                                results: data.output?.resultUrls || [],
+                                                                                results: finalUrls,
                                                                                 status: "completed",
                                                                                 activeWorkflowInstanceId: null,
                                                                                 activeWorkflowRunId: null,
@@ -576,29 +610,100 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                                         resolve();
                                                                     } else if (data.status === "errored" || data.status === "terminated") {
                                                                         clearInterval(poll);
+                                                                        const partialUrls =
+                                                                            data.output?.resultUrls?.length
+                                                                                ? data.output.resultUrls
+                                                                                : latestObservedUrls;
+
+                                                                        if (partialUrls.length > 0) {
+                                                                            if (isContinuationRun) {
+                                                                                await sessionService.appendResults(persistedSessionId, partialUrls);
+                                                                                await sessionService.updateSession(persistedSessionId, {
+                                                                                    status: "completed",
+                                                                                    activeWorkflowInstanceId: null,
+                                                                                    activeWorkflowRunId: null,
+                                                                                });
+                                                                            } else {
+                                                                                await sessionService.updateSession(persistedSessionId, {
+                                                                                    results: partialUrls,
+                                                                                    status: "completed",
+                                                                                    activeWorkflowInstanceId: null,
+                                                                                    activeWorkflowRunId: null,
+                                                                                });
+                                                                            }
+                                                                            setGenerationError(
+                                                                                `Workflow zakończył się częściowo: ${partialUrls.length}/${requestedCount} zdjęć. Możesz dogenerować brakujące ujęcia w tej sesji.`
+                                                                            );
+                                                                            setIsGenerating(false);
+                                                                            resolve();
+                                                                            return;
+                                                                        }
+
                                                                         const errStr = getReadableError(data.error, "Workflow zakończony błędem");
                                                                         setIsGenerating(false);
                                                                         reject(new Error(errStr || "Workflow zakończony błędem"));
                                                                     } else if (attempts >= maxAttempts) {
                                                                         clearInterval(poll);
+                                                                        if (isContinuationRun) {
+                                                                            if (latestObservedUrls.length > 0) {
+                                                                                await sessionService.appendResults(persistedSessionId, latestObservedUrls);
+                                                                            }
+                                                                        } else {
+                                                                            await sessionService.updateSession(persistedSessionId, {
+                                                                                results: latestObservedUrls,
+                                                                            });
+                                                                        }
+                                                                        await sessionService.updateSession(persistedSessionId, {
+                                                                            status: "processing",
+                                                                            activeWorkflowInstanceId: instanceId,
+                                                                            activeWorkflowRunId: runId,
+                                                                        });
+                                                                        setGenerationError(
+                                                                            `Generowanie trwa dłużej niż zwykle${latestObservedUrls.length > 0 ? ` (${latestObservedUrls.length}/${requestedCount} gotowe)` : ""}. Możesz przejść do sesji, workflow nadal działa w tle.`
+                                                                        );
                                                                         setIsGenerating(false);
-                                                                        reject(new Error("Przekroczono czas oczekiwania"));
+                                                                        resolve();
                                                                     }
-                                                                } catch (e) { console.warn("Poll error:", e); }
+                                                                } catch (e) {
+                                                                    console.warn("Poll error:", e);
+                                                                } finally {
+                                                                    pollInFlight = false;
+                                                                }
                                                             }, 3000);
                                                         });
 
                                                     } catch (error: unknown) {
                                                         console.error("Failed to generate:", error);
                                                         if (activeSessionId) {
-                                                            await sessionService.updateSession(activeSessionId, {
-                                                                status: "failed",
-                                                                activeWorkflowInstanceId: null,
-                                                                activeWorkflowRunId: null,
-                                                            });
+                                                            if (latestObservedUrls.length > 0) {
+                                                                if (isContinuationRun) {
+                                                                    await sessionService.appendResults(activeSessionId, latestObservedUrls);
+                                                                } else {
+                                                                    await sessionService.updateSession(activeSessionId, {
+                                                                        results: latestObservedUrls,
+                                                                    });
+                                                                }
+                                                                await sessionService.updateSession(activeSessionId, {
+                                                                    status: "completed",
+                                                                    activeWorkflowInstanceId: null,
+                                                                    activeWorkflowRunId: null,
+                                                                });
+                                                            } else if (activeWorkflowInstanceId && activeWorkflowRunId) {
+                                                                await sessionService.updateSession(activeSessionId, {
+                                                                    status: "processing",
+                                                                    activeWorkflowInstanceId: activeWorkflowInstanceId,
+                                                                    activeWorkflowRunId: activeWorkflowRunId,
+                                                                });
+                                                            } else {
+                                                                await sessionService.updateSession(activeSessionId, {
+                                                                    status: "failed",
+                                                                    activeWorkflowInstanceId: null,
+                                                                    activeWorkflowRunId: null,
+                                                                });
+                                                            }
                                                         }
                                                         const errorMsg = getReadableError(error, "Nieznany błąd");
-                                                        setGenerationError(`Błąd generowania: ${errorMsg}. Twoje punkty (${cost} PKT) nie zostały zużyte lub zostaną zaraz zwrócone na konto.`);
+                                                        setGenerationError(`Błąd generowania: ${errorMsg}. Jeśli workflow już wystartował, sprawdź sesję za chwilę — wyniki mogą nadal napływać.`);
                                                         setIsGenerating(false);
                                                     }
                                                 }}
