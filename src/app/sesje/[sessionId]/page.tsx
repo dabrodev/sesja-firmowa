@@ -328,7 +328,16 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
             cancelled = true;
             clearInterval(interval);
         };
-    }, [session?.id, session?.status, session?.results, user]);
+    }, [
+        session?.id,
+        session?.status,
+        session?.results,
+        session?.activeWorkflowInstanceId,
+        session?.activeWorkflowRunId,
+        session?.updatedAt,
+        session?.promptRuns,
+        user
+    ]);
 
     const resetReferenceDraft = useCallback((sessionData: Photosession) => {
         setFaceReferencesDraft(
@@ -391,18 +400,14 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                         patch.outfitReferences = sanitizedOutfitReferences;
                     }
 
-                    const hasAllRequestedResults =
-                        sanitizedData.results.length >= Math.max(1, sanitizedData.requestedCount);
+                    const hasWorkflowBinding = Boolean(
+                        (sanitizedData.activeWorkflowInstanceId?.trim() || "") ||
+                        sanitizedData.activeWorkflowRunId
+                    );
                     const shouldHealStaleProcessing =
                         sanitizedData.status === "processing" &&
-                        (
-                            hasAllRequestedResults ||
-                            (
-                                sanitizedData.results.length > 0 &&
-                                !sanitizedData.activeWorkflowInstanceId &&
-                                !sanitizedData.activeWorkflowRunId
-                            )
-                        );
+                        sanitizedData.results.length > 0 &&
+                        !hasWorkflowBinding;
                     if (shouldHealStaleProcessing) {
                         patch.status = "completed";
                         patch.activeWorkflowInstanceId = null;

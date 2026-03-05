@@ -758,7 +758,56 @@ export function SessionWizard({ sessionId: initialSessionId, onNewSessionRequest
                                                     />
                                                 </div>
                                                 <p className="text-zinc-500 text-sm animate-pulse tracking-wide uppercase">{generationStatus}</p>
+                                                <p className="text-xs text-zinc-400">
+                                                    Gotowe: <span className="font-semibold text-white">{resultUrls.length}</span> / {requestedCount}
+                                                </p>
                                             </div>
+                                        </div>
+                                        <div className="mx-auto grid w-full max-w-3xl grid-cols-2 gap-3 sm:grid-cols-4">
+                                            {Array.from({ length: requestedCount }).map((_, index) => {
+                                                const shotNumber = index + 1;
+                                                const isDone = index < resultUrls.length;
+                                                const isActive = index === resultUrls.length && resultUrls.length < requestedCount;
+
+                                                return (
+                                                    <div
+                                                        key={`generator-shot-${shotNumber}`}
+                                                        className={cn(
+                                                            "rounded-xl border p-3 text-left transition-all",
+                                                            isDone
+                                                                ? "border-emerald-500/40 bg-emerald-500/10"
+                                                                : isActive
+                                                                    ? "border-blue-500/40 bg-blue-500/10"
+                                                                    : "border-white/10 bg-white/5"
+                                                        )}
+                                                    >
+                                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                                                            Zdjęcie {shotNumber}
+                                                        </p>
+                                                        <div className="mt-2 flex items-center gap-2">
+                                                            {isDone ? (
+                                                                <CheckCircle2 className="h-4 w-4 text-emerald-300" />
+                                                            ) : isActive ? (
+                                                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-200/30 border-t-blue-200" />
+                                                            ) : (
+                                                                <Sparkles className="h-4 w-4 text-zinc-500" />
+                                                            )}
+                                                            <span
+                                                                className={cn(
+                                                                    "text-xs font-medium",
+                                                                    isDone
+                                                                        ? "text-emerald-100"
+                                                                        : isActive
+                                                                            ? "text-blue-100"
+                                                                            : "text-zinc-400"
+                                                                )}
+                                                            >
+                                                                {isDone ? "Gotowe" : isActive ? "Generuję..." : "W kolejce"}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                         <div className="mx-auto w-full max-w-2xl rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-emerald-100">
                                             Generowanie działa w tle. Możesz wyjść z generatora, a gotowe zdjęcia będą automatycznie pojawiać się w sesji.

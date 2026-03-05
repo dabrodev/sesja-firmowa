@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { AppHeader } from "@/components/app-header";
+import { cn } from "@/lib/utils";
 
 const STALE_PROCESSING_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -28,19 +29,15 @@ export default function SessionsPage() {
             const normalizedSessions = await Promise.all(
                 fetchedSessions.map(async (fetchedSession) => {
                     const fetchedSessionId = fetchedSession.id;
-                    const hasAllRequestedResults =
-                        fetchedSession.results.length >= Math.max(1, fetchedSession.requestedCount);
+                    const hasWorkflowBinding = Boolean(
+                        (fetchedSession.activeWorkflowInstanceId?.trim() || "") ||
+                        fetchedSession.activeWorkflowRunId
+                    );
                     const shouldHealStaleProcessing =
                         fetchedSessionId &&
                         fetchedSession.status === "processing" &&
-                        (
-                            hasAllRequestedResults ||
-                            (
-                                fetchedSession.results.length > 0 &&
-                                !fetchedSession.activeWorkflowInstanceId &&
-                                !fetchedSession.activeWorkflowRunId
-                            )
-                        );
+                        fetchedSession.results.length > 0 &&
+                        !hasWorkflowBinding;
 
                     if (!shouldHealStaleProcessing) {
                         return fetchedSession;
@@ -407,6 +404,28 @@ export default function SessionsPage() {
                                                     className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-500"
                                                     style={{ width: `${progressPercent}%` }}
                                                 />
+                                            </div>
+                                            <div className="mt-3 grid grid-cols-5 gap-2">
+                                                {Array.from({ length: expectedCount }).map((_, shotIndex) => {
+                                                    const isDone = shotIndex < generatedCount;
+                                                    const isActive = shotIndex === generatedCount && generatedCount < expectedCount;
+
+                                                    return (
+                                                        <div
+                                                            key={`${session.id}-shot-${shotIndex + 1}`}
+                                                            className={cn(
+                                                                "rounded-md border px-2 py-1 text-center text-[10px] font-semibold uppercase tracking-wide",
+                                                                isDone
+                                                                    ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-100"
+                                                                    : isActive
+                                                                        ? "border-blue-400/40 bg-blue-500/15 text-blue-100"
+                                                                        : "border-white/10 bg-white/5 text-zinc-400"
+                                                            )}
+                                                        >
+                                                            {shotIndex + 1}
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
                                     );
