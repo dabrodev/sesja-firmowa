@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useAppStore } from "@/lib/store";
 import { useRouter } from "next/navigation";
 import { downloadFile } from "@/lib/download";
+import { createPortal } from "react-dom";
 
 interface GenerationResultsProps {
     sessionId?: string | null;
@@ -68,6 +69,15 @@ export function GenerationResults({ sessionId, resultUrls = [], expectedCount = 
         window.addEventListener("keydown", onKeyDown);
         return () => window.removeEventListener("keydown", onKeyDown);
     }, [closeLightbox, goNext, goPrev, selectedIndex]);
+
+    useEffect(() => {
+        if (selectedIndex === null) return;
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        return () => {
+            document.body.style.overflow = previousOverflow;
+        };
+    }, [selectedIndex]);
 
     const handleDownload = async (url: string, index: number) => {
         try {
@@ -166,72 +176,77 @@ export function GenerationResults({ sessionId, resultUrls = [], expectedCount = 
             </div>
 
             {/* Lightbox */}
-            <AnimatePresence>
-                {currentImage && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        onClick={closeLightbox}
-                        className="fixed inset-0 z-[100] bg-black/70 p-4 backdrop-blur-sm md:p-6"
-                        role="dialog"
-                        aria-modal="true"
-                        aria-label={`Podgląd zdjęcia ${Math.max(1, currentPosition + 1)} z ${Math.max(1, availableIndices.length)}`}
-                    >
-                        <motion.div
-                            initial={{ scale: 0.9, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.9, opacity: 0 }}
-                            onClick={(e) => e.stopPropagation()}
-                            className="relative mx-auto flex max-h-[92vh] w-auto max-w-[95vw] items-center justify-center rounded-2xl border border-white/10 bg-zinc-950/90 p-2 shadow-2xl md:p-3"
-                        >
-                            <Button
-                                size="icon"
-                                variant="secondary"
+            {typeof document !== "undefined"
+                ? createPortal(
+                    <AnimatePresence>
+                        {currentImage && (
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
                                 onClick={closeLightbox}
-                                className="absolute right-3 top-3 z-20 rounded-full border border-white/20 bg-black/60 text-white hover:bg-black/80"
-                                aria-label="Zamknij podgląd"
+                                className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm md:p-6"
+                                role="dialog"
+                                aria-modal="true"
+                                aria-label={`Podgląd zdjęcia ${Math.max(1, currentPosition + 1)} z ${Math.max(1, availableIndices.length)}`}
                             >
-                                <X className="h-4 w-4" />
-                            </Button>
-
-                            {availableIndices.length > 1 && (
-                                <>
+                                <motion.div
+                                    initial={{ scale: 0.9, opacity: 0 }}
+                                    animate={{ scale: 1, opacity: 1 }}
+                                    exit={{ scale: 0.9, opacity: 0 }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="relative mx-auto flex max-h-[92vh] w-auto max-w-[95vw] items-center justify-center rounded-2xl border border-white/10 bg-zinc-950/90 p-2 shadow-2xl md:p-3"
+                                >
                                     <Button
                                         size="icon"
                                         variant="secondary"
-                                        onClick={goPrev}
-                                        disabled={!hasPrev}
-                                        className="absolute left-3 top-1/2 z-20 -translate-y-1/2 rounded-full border border-white/20 bg-black/60 text-white hover:bg-black/80 disabled:opacity-30"
-                                        aria-label="Poprzednie zdjęcie"
+                                        onClick={closeLightbox}
+                                        className="absolute right-3 top-3 z-20 rounded-full border border-white/20 bg-black/60 text-white hover:bg-black/80"
+                                        aria-label="Zamknij podgląd"
                                     >
-                                        <ChevronLeft className="h-5 w-5" />
+                                        <X className="h-4 w-4" />
                                     </Button>
-                                    <Button
-                                        size="icon"
-                                        variant="secondary"
-                                        onClick={goNext}
-                                        disabled={!hasNext}
-                                        className="absolute right-3 top-1/2 z-20 -translate-y-1/2 rounded-full border border-white/20 bg-black/60 text-white hover:bg-black/80 disabled:opacity-30"
-                                        aria-label="Następne zdjęcie"
-                                    >
-                                        <ChevronRight className="h-5 w-5" />
-                                    </Button>
-                                    <div className="absolute bottom-3 left-1/2 z-20 -translate-x-1/2 rounded-full border border-white/15 bg-black/60 px-3 py-1 text-xs text-white">
-                                        {currentPosition + 1} / {availableIndices.length}
-                                    </div>
-                                </>
-                            )}
 
-                            <motion.img
-                                src={currentImage}
-                                alt="Powiększone zdjęcie"
-                                className="max-h-[86vh] max-w-[92vw] rounded-xl object-contain shadow-2xl"
-                            />
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                                    {availableIndices.length > 1 && (
+                                        <>
+                                            <Button
+                                                size="icon"
+                                                variant="secondary"
+                                                onClick={goPrev}
+                                                disabled={!hasPrev}
+                                                className="absolute left-3 top-1/2 z-20 -translate-y-1/2 rounded-full border border-white/20 bg-black/60 text-white hover:bg-black/80 disabled:opacity-30"
+                                                aria-label="Poprzednie zdjęcie"
+                                            >
+                                                <ChevronLeft className="h-5 w-5" />
+                                            </Button>
+                                            <Button
+                                                size="icon"
+                                                variant="secondary"
+                                                onClick={goNext}
+                                                disabled={!hasNext}
+                                                className="absolute right-3 top-1/2 z-20 -translate-y-1/2 rounded-full border border-white/20 bg-black/60 text-white hover:bg-black/80 disabled:opacity-30"
+                                                aria-label="Następne zdjęcie"
+                                            >
+                                                <ChevronRight className="h-5 w-5" />
+                                            </Button>
+                                            <div className="absolute bottom-3 left-1/2 z-20 -translate-x-1/2 rounded-full border border-white/15 bg-black/60 px-3 py-1 text-xs text-white">
+                                                {currentPosition + 1} / {availableIndices.length}
+                                            </div>
+                                        </>
+                                    )}
+
+                                    <motion.img
+                                        src={currentImage}
+                                        alt="Powiększone zdjęcie"
+                                        className="max-h-[86vh] max-w-[92vw] rounded-xl object-contain shadow-2xl"
+                                    />
+                                </motion.div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>,
+                    document.body
+                )
+                : null}
         </div>
     );
 }
