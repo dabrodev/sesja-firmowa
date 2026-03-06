@@ -86,6 +86,16 @@ function normalizeFailedIndices(indices: unknown, requestedCount: number): numbe
     ).sort((a, b) => a - b);
 }
 
+function extractRunIdFromResultUrl(url: string): string | null {
+    const key = extractR2KeyFromReference(url);
+    if (!key) return null;
+
+    const match = key.match(/^results\/[^/]+\/([^/]+)\/photo-\d+\.jpg$/i);
+    if (!match) return null;
+
+    return match[1] || null;
+}
+
 export default function SessionDetailsPage({ params }: { params: Promise<{ sessionId: string }> }) {
     const { sessionId } = use(params);
     const { user, userProfile, loading: authLoading, logout } = useAuth();
@@ -142,8 +152,13 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
         });
     }, [resultCount]);
 
-    const scrollToResultsGrid = useCallback(() => {
-        document.getElementById("session-results-grid")?.scrollIntoView({
+    const scrollToCurrentRun = useCallback(() => {
+        const target =
+            document.getElementById("current-run-anchor") ??
+            document.getElementById("session-results-grid") ??
+            document.getElementById("results-section");
+
+        target?.scrollIntoView({
             behavior: "smooth",
             block: "start",
         });
@@ -797,10 +812,7 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
             setCurrentRunFailedIndices([]);
 
             requestAnimationFrame(() => {
-                document.getElementById("results-section")?.scrollIntoView({
-                    behavior: "smooth",
-                    block: "start",
-                });
+                scrollToCurrentRun();
             });
         } catch (error) {
             console.error("Error starting quick continuation:", error);
@@ -856,6 +868,11 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
             (shotNumber) => !currentRunFailedIndices.includes(shotNumber)
         ).slice(currentRunGeneratedCount)
         : [];
+    const activeRunId = session.activeWorkflowRunId?.trim() || "";
+    const firstCurrentRunResultIndex =
+        isProcessing && activeRunId
+            ? session.results.findIndex((url) => extractRunIdFromResultUrl(url) === activeRunId)
+            : -1;
 
     return (
         <div className="min-h-screen bg-[#020617] text-white selection:bg-blue-500/30 font-sans pb-20">
@@ -978,7 +995,7 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                                 size="sm"
                                                 variant="outline"
                                                 className="border-blue-400/30 bg-blue-500/10 text-blue-100 hover:bg-blue-500/20 hover:text-white"
-                                                onClick={scrollToResultsGrid}
+                                                onClick={scrollToCurrentRun}
                                             >
                                                 Przejdź do zdjęć
                                             </Button>
@@ -1015,6 +1032,7 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                 {session.results.map((url, i) => (
                                     <motion.div
                                         key={i}
+                                        id={i === firstCurrentRunResultIndex ? "current-run-anchor" : undefined}
                                         initial={{ opacity: 0, y: 20 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         transition={{ delay: i * 0.1 }}
@@ -1089,6 +1107,11 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                             {currentRunFailedIndices.map((failedIndex) => (
                                                 <div
                                                     key={`failed-${failedIndex}`}
+                                                    id={
+                                                        firstCurrentRunResultIndex === -1 && failedIndex === currentRunFailedIndices[0]
+                                                            ? "current-run-anchor"
+                                                            : undefined
+                                                    }
                                                     className="relative rounded-2xl overflow-hidden border border-dashed border-red-500/40 bg-red-500/10 aspect-[3/4] flex items-center justify-center"
                                                 >
                                                     <div className="text-center px-4">
@@ -1105,6 +1128,13 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                                 return (
                                                     <div
                                                         key={`placeholder-${idx}`}
+                                                        id={
+                                                            firstCurrentRunResultIndex === -1 &&
+                                                            currentRunFailedIndices.length === 0 &&
+                                                            idx === 0
+                                                                ? "current-run-anchor"
+                                                                : undefined
+                                                        }
                                                         className="relative rounded-2xl overflow-hidden border border-dashed border-blue-500/30 bg-blue-500/5 aspect-[3/4] flex items-center justify-center"
                                                     >
                                                         <div className="text-center">
