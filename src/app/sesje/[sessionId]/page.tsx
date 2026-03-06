@@ -3,12 +3,22 @@
 import { useEffect, useState, use, useCallback } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { sessionService, Photosession, PromptRunTrace } from "@/lib/sessions";
-import { Calendar, ArrowLeft, Loader2, Download, ExternalLink, ImageIcon, PencilLine, Save, X, Trash2, Square, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar, ArrowLeft, Loader2, Download, ExternalLink, ImageIcon, PencilLine, Save, X, Trash2, Square, ChevronLeft, ChevronRight, Play, Pause } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
     Select,
     SelectContent,
@@ -26,6 +36,7 @@ import { ImageWithPlaceholder } from "@/components/image-with-placeholder";
 import { downloadFile } from "@/lib/download";
 import { assetService } from "@/lib/assets";
 import { AppHeader } from "@/components/app-header";
+import { PresetSelector, PRESET_OUTFITS } from "@/components/preset-selector";
 import {
     DEFAULT_REQUESTED_COUNT,
     formatPhotoCountLabel,
@@ -95,7 +106,9 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
     const [isDeletingSession, setIsDeletingSession] = useState(false);
     const [isForceStoppingSession, setIsForceStoppingSession] = useState(false);
     const [isQuickGenerating, setIsQuickGenerating] = useState(false);
+    const [isQuickContinueDialogOpen, setIsQuickContinueDialogOpen] = useState(false);
     const [selectedResultIndex, setSelectedResultIndex] = useState<number | null>(null);
+    const [isSlideshowPlaying, setIsSlideshowPlaying] = useState(false);
 
     const resultCount = session?.results.length ?? 0;
     const selectedResultUrl = selectedResultIndex !== null ? session?.results[selectedResultIndex] ?? null : null;
@@ -103,6 +116,7 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
     const hasNextResult = selectedResultIndex !== null && selectedResultIndex < resultCount - 1;
 
     const closeResultPreview = useCallback(() => {
+        setIsSlideshowPlaying(false);
         setSelectedResultIndex(null);
     }, []);
 
@@ -119,6 +133,21 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
             return current + 1;
         });
     }, [resultCount]);
+
+    const showNextResultLoop = useCallback(() => {
+        setSelectedResultIndex((current) => {
+            if (current === null || resultCount <= 1) return current;
+            if (current >= resultCount - 1) return 0;
+            return current + 1;
+        });
+    }, [resultCount]);
+
+    const scrollToResultsGrid = useCallback(() => {
+        document.getElementById("session-results-grid")?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+        });
+    }, []);
 
     const openResultEditor = useCallback((resultUrl: string) => {
         const editKey = extractR2KeyFromReference(resultUrl);
@@ -162,6 +191,22 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
         window.addEventListener("keydown", onKeyDown);
         return () => window.removeEventListener("keydown", onKeyDown);
     }, [closeResultPreview, selectedResultIndex, showNextResult, showPrevResult]);
+
+    useEffect(() => {
+        if (!isSlideshowPlaying || selectedResultIndex === null || resultCount <= 1) return;
+
+        const timer = window.setInterval(() => {
+            showNextResultLoop();
+        }, 3200);
+
+        return () => window.clearInterval(timer);
+    }, [isSlideshowPlaying, selectedResultIndex, resultCount, showNextResultLoop]);
+
+    useEffect(() => {
+        if (selectedResultIndex === null || resultCount <= 1) {
+            setIsSlideshowPlaying(false);
+        }
+    }, [selectedResultIndex, resultCount]);
 
     const parseDeleteError = useCallback((error: unknown): string => {
         if (error instanceof Error && error.message) return error.message;
@@ -297,12 +342,16 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
 
                 if (data.status === "complete") {
                     if (workflowRunId) {
-                        await sessionService.settleRunBilling({
-                            sessionId: activeSessionId,
-                            uid: user.uid,
-                            runId: workflowRunId,
-                            generatedCount,
-                        });
+                        try {
+                            await sessionService.settleRunBilling({
+                                sessionId: activeSessionId,
+                                uid: user.uid,
+                                runId: workflowRunId,
+                                generatedCount,
+                            });
+                        } catch (settlementError) {
+                            console.warn("Failed to settle completed run billing:", settlementError);
+                        }
                     }
                     const shouldFinalize =
                         hasNewResults ||
@@ -338,12 +387,16 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
 
                 if (data.status === "errored" || data.status === "terminated") {
                     if (workflowRunId) {
-                        await sessionService.settleRunBilling({
-                            sessionId: activeSessionId,
-                            uid: user.uid,
-                            runId: workflowRunId,
-                            generatedCount,
-                        });
+                        try {
+                            await sessionService.settleRunBilling({
+                                sessionId: activeSessionId,
+                                uid: user.uid,
+                                runId: workflowRunId,
+                                generatedCount,
+                            });
+                        } catch (settlementError) {
+                            console.warn("Failed to settle terminal run billing:", settlementError);
+                        }
                     }
                     const terminalStatus: Photosession["status"] = generatedCount > 0 ? "completed" : "failed";
                     await sessionService.updateSession(activeSessionId, {
@@ -639,12 +692,16 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
         setIsForceStoppingSession(true);
         try {
             if (session.activeWorkflowRunId) {
-                await sessionService.settleRunBilling({
-                    sessionId: session.id,
-                    uid: user.uid,
-                    runId: session.activeWorkflowRunId,
-                    generatedCount: currentRunGeneratedCount,
-                });
+                try {
+                    await sessionService.settleRunBilling({
+                        sessionId: session.id,
+                        uid: user.uid,
+                        runId: session.activeWorkflowRunId,
+                        generatedCount: currentRunGeneratedCount,
+                    });
+                } catch (settlementError) {
+                    console.warn("Failed to settle run billing during force stop:", settlementError);
+                }
             }
             await sessionService.updateSession(session.id, {
                 status: targetStatus,
@@ -696,11 +753,6 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
             alert(`Brakuje ${missingCredits} PKT, aby dodać kolejne zdjęcia na tych samych ustawieniach.`);
             return;
         }
-
-        const confirmed = confirm(
-            `Dodać ${formatPhotoCountLabel(session.requestedCount)} na tych samych ustawieniach? Koszt: ${quickGenerationCost} PKT.`
-        );
-        if (!confirmed) return;
 
         setIsQuickGenerating(true);
         try {
@@ -839,7 +891,7 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                         <div className="flex flex-wrap gap-2">
                             <Button
                                 className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/20 hover:from-blue-500 hover:to-indigo-500"
-                                onClick={() => void handleQuickContinueSession()}
+                                onClick={() => setIsQuickContinueDialogOpen(true)}
                                 disabled={session.status === "processing" || isQuickGenerating || isEditingReferences || !hasEnoughCreditsForQuickContinue}
                             >
                                 {isQuickGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -921,16 +973,26 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                         />
                                     </div>
                                     <div className="pt-1">
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            className="border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20 hover:text-amber-100"
-                                            onClick={() => void handleForceStopSession()}
-                                            disabled={isForceStoppingSession || isDeletingSession}
-                                        >
-                                            {isForceStoppingSession ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Square className="mr-2 h-4 w-4" />}
-                                            Wymuś zatrzymanie tej sesji
-                                        </Button>
+                                        <div className="flex flex-wrap gap-2">
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="border-blue-400/30 bg-blue-500/10 text-blue-100 hover:bg-blue-500/20 hover:text-white"
+                                                onClick={scrollToResultsGrid}
+                                            >
+                                                Przejdź do zdjęć
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20 hover:text-amber-100"
+                                                onClick={() => void handleForceStopSession()}
+                                                disabled={isForceStoppingSession || isDeletingSession}
+                                            >
+                                                {isForceStoppingSession ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Square className="mr-2 h-4 w-4" />}
+                                                Wymuś zatrzymanie tej sesji
+                                            </Button>
+                                        </div>
                                     </div>
                                 </CardContent>
                             </Card>
@@ -949,7 +1011,7 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                 </CardContent>
                             </Card>
                         ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            <div id="session-results-grid" className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                                 {session.results.map((url, i) => (
                                     <motion.div
                                         key={i}
@@ -1110,6 +1172,21 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                             maxFiles={1}
                                             userId={user.uid}
                                             assetType="office"
+                                        />
+
+                                        <div className="h-px bg-white/10 w-full" />
+
+                                        <PresetSelector
+                                            title="Przykładowe stylizacje (opcjonalnie)"
+                                            description="Wybierz styl, który najbardziej pasuje do klimatu kolejnych zdjęć."
+                                            presets={PRESET_OUTFITS}
+                                            selectedAssets={outfitReferencesDraft}
+                                            onSelect={(asset) => setOutfitReferencesDraft((prev) => [...prev, asset])}
+                                            onDeselect={(id) =>
+                                                setOutfitReferencesDraft((prev) => prev.filter((asset) => asset.id !== id))
+                                            }
+                                            multiple={true}
+                                            showGenderFilter={true}
                                         />
 
                                         <div className="h-px bg-white/10 w-full" />
@@ -1312,7 +1389,7 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                         <div className="flex flex-col gap-2">
                                             <Button
                                                 className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/20 hover:from-blue-500 hover:to-indigo-500"
-                                                onClick={() => void handleQuickContinueSession()}
+                                                onClick={() => setIsQuickContinueDialogOpen(true)}
                                                 disabled={session.status === "processing" || isQuickGenerating || isEditingReferences || !hasEnoughCreditsForQuickContinue}
                                             >
                                                 {isQuickGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -1336,6 +1413,32 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                 </div>
             </main>
 
+            <AlertDialog open={isQuickContinueDialogOpen} onOpenChange={setIsQuickContinueDialogOpen}>
+                <AlertDialogContent className="border-white/10 bg-[#0b1120] text-white">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Dodaj więcej zdjęć?</AlertDialogTitle>
+                        <AlertDialogDescription className="text-zinc-300">
+                            Uruchomimy kolejny run na tych samych materiałach i tym samym prompcie.
+                            Koszt tej akcji to <span className="font-semibold text-white">{quickGenerationCost} PKT</span> za pakiet{" "}
+                            <span className="font-semibold text-white">{formatPhotoCountLabel(session.requestedCount)}</span>.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white">
+                            Anuluj
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            className="bg-blue-600 text-white hover:bg-blue-500"
+                            onClick={() => {
+                                void handleQuickContinueSession();
+                            }}
+                        >
+                            Dodaj więcej zdjęć
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
             <AnimatePresence>
                 {selectedResultUrl && (
                     <motion.div
@@ -1356,6 +1459,17 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                             className="relative mx-auto flex h-full w-full max-w-5xl items-center justify-center rounded-2xl border border-white/10 bg-zinc-950/90 p-4 shadow-2xl md:p-6"
                         >
                             <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
+                                {resultCount > 1 ? (
+                                    <Button
+                                        variant="secondary"
+                                        onClick={() => setIsSlideshowPlaying((current) => !current)}
+                                        className="rounded-full border border-white/20 bg-black/60 px-3 text-white hover:bg-black/80"
+                                        aria-label={isSlideshowPlaying ? "Zatrzymaj slideshow" : "Uruchom slideshow"}
+                                    >
+                                        {isSlideshowPlaying ? <Pause className="mr-2 h-4 w-4" /> : <Play className="mr-2 h-4 w-4" />}
+                                        {isSlideshowPlaying ? "Pauza" : "Slideshow"}
+                                    </Button>
+                                ) : null}
                                 <Button
                                     size="icon"
                                     variant="secondary"

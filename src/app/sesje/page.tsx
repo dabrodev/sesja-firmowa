@@ -13,12 +13,50 @@ import { cn } from "@/lib/utils";
 
 const STALE_PROCESSING_TIMEOUT_MS = 5 * 60 * 1000;
 
+function extractShotNumberFromUrl(url: string): number | null {
+    const match = url.match(/photo-(\d+)\.jpg/i);
+    if (!match) return null;
+    const parsed = Number.parseInt(match[1], 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    return parsed;
+}
+
+function countGeneratedShots(urls: string[]): number {
+    const indexed = new Set<number>();
+    const fallback = new Set<string>();
+    for (const url of urls) {
+        if (!url) continue;
+        const shot = extractShotNumberFromUrl(url);
+        if (shot !== null) {
+            indexed.add(shot);
+        } else {
+            fallback.add(url);
+        }
+    }
+    return indexed.size + fallback.size;
+}
+
+function normalizeFailedIndices(indices: unknown, requestedCount: number): number[] {
+    if (!Array.isArray(indices)) return [];
+    return Array.from(
+        new Set(
+            indices.flatMap((value) => {
+                if (typeof value !== "number" || !Number.isFinite(value)) return [];
+                const rounded = Math.round(value);
+                if (rounded < 1 || rounded > requestedCount) return [];
+                return [rounded];
+            })
+        )
+    ).sort((a, b) => a - b);
+}
+
 export default function SessionsPage() {
     const { user, userProfile, loading: authLoading, logout } = useAuth();
     const router = useRouter();
     const [sessions, setSessions] = useState<Photosession[]>([]);
     const [loading, setLoading] = useState(true);
     const [runProgress, setRunProgress] = useState<Record<string, number>>({});
+    const [runFailures, setRunFailures] = useState<Record<string, number[]>>({});
     const [forceStoppingSessionIds, setForceStoppingSessionIds] = useState<Record<string, boolean>>({});
 
     const fetchData = useCallback(async () => {
@@ -163,15 +201,28 @@ export default function SessionsPage() {
 
                 const data = await response.json() as {
                     status: "queued" | "running" | "complete" | "errored" | "terminated";
-                    output?: { resultUrls?: string[] };
+                    output?: { resultUrls?: string[]; failedIndices?: number[] };
                 };
                 if (cancelled) return;
 
                 const workflowResults = data.output?.resultUrls ?? [];
+                const generatedCount = countGeneratedShots(workflowResults);
+                const failedIndices = normalizeFailedIndices(
+                    data.output?.failedIndices,
+                    Math.max(1, processingSession.requestedCount)
+                );
                 setRunProgress((prev) => {
                     const current = prev[processingSession.id!] ?? 0;
-                    if (current === workflowResults.length) return prev;
-                    return { ...prev, [processingSession.id!]: workflowResults.length };
+                    if (current === generatedCount) return prev;
+                    return { ...prev, [processingSession.id!]: generatedCount };
+                });
+                setRunFailures((prev) => {
+                    const previous = prev[processingSession.id!] ?? [];
+                    const unchanged =
+                        previous.length === failedIndices.length &&
+                        previous.every((value, index) => value === failedIndices[index]);
+                    if (unchanged) return prev;
+                    return { ...prev, [processingSession.id!]: failedIndices };
                 });
 
                 const mergedResults = workflowResults.length > 0
@@ -180,6 +231,18 @@ export default function SessionsPage() {
                 const hasNewResults = mergedResults.length !== (processingSession.results?.length || 0);
 
                 if (data.status === "complete") {
+                    if (workflowRunId) {
+                        try {
+                            await sessionService.settleRunBilling({
+                                sessionId: processingSession.id,
+                                uid: user.uid,
+                                runId: workflowRunId,
+                                generatedCount,
+                            });
+                        } catch (settlementError) {
+                            console.warn("Failed to settle completed run billing:", settlementError);
+                        }
+                    }
                     await sessionService.updateSession(processingSession.id, {
                         status: "completed",
                         results: mergedResults,
@@ -205,8 +268,22 @@ export default function SessionsPage() {
                 }
 
                 if (data.status === "errored" || data.status === "terminated") {
+                    if (workflowRunId) {
+                        try {
+                            await sessionService.settleRunBilling({
+                                sessionId: processingSession.id,
+                                uid: user.uid,
+                                runId: workflowRunId,
+                                generatedCount,
+                            });
+                        } catch (settlementError) {
+                            console.warn("Failed to settle terminal run billing:", settlementError);
+                        }
+                    }
+                    const terminalStatus: Photosession["status"] = generatedCount > 0 ? "completed" : "failed";
                     await sessionService.updateSession(processingSession.id, {
-                        status: "failed",
+                        status: terminalStatus,
+                        results: mergedResults,
                         activeWorkflowInstanceId: null,
                         activeWorkflowRunId: null,
                     });
@@ -214,10 +291,23 @@ export default function SessionsPage() {
                         setSessions((prev) =>
                             prev.map((session) =>
                                 session.id === processingSession.id
-                                    ? { ...session, status: "failed", activeWorkflowInstanceId: null, activeWorkflowRunId: null }
+                                    ? {
+                                        ...session,
+                                        status: terminalStatus,
+                                        results: mergedResults,
+                                        activeWorkflowInstanceId: null,
+                                        activeWorkflowRunId: null,
+                                    }
                                     : session
                             )
                         );
+                    }
+                    if (!cancelled) {
+                        setRunFailures((prev) => {
+                            const next = { ...prev };
+                            delete next[processingSession.id!];
+                            return next;
+                        });
                     }
                     return;
                 }
@@ -258,7 +348,7 @@ export default function SessionsPage() {
     }, [user, sessions]);
 
     const handleForceStopSession = async (sessionToStop: Photosession) => {
-        if (!sessionToStop.id || sessionToStop.status !== "processing") return;
+        if (!user || !sessionToStop.id || sessionToStop.status !== "processing") return;
 
         const confirmed = confirm(
             "Wymusić zatrzymanie generowania tej sesji? Możesz później wznowić kontynuację ręcznie."
@@ -268,9 +358,22 @@ export default function SessionsPage() {
         const targetStatus: Photosession["status"] =
             sessionToStop.results.length > 0 ? "completed" : "failed";
         const sessionId = sessionToStop.id;
+        const generatedCount = runProgress[sessionId] ?? 0;
 
         setForceStoppingSessionIds((prev) => ({ ...prev, [sessionId]: true }));
         try {
+            if (sessionToStop.activeWorkflowRunId) {
+                try {
+                    await sessionService.settleRunBilling({
+                        sessionId,
+                        uid: user.uid,
+                        runId: sessionToStop.activeWorkflowRunId,
+                        generatedCount,
+                    });
+                } catch (settlementError) {
+                    console.warn("Failed to settle run billing during force stop:", settlementError);
+                }
+            }
             await sessionService.updateSession(sessionId, {
                 status: targetStatus,
                 activeWorkflowInstanceId: null,
@@ -290,6 +393,11 @@ export default function SessionsPage() {
                 )
             );
             setRunProgress((prev) => {
+                const next = { ...prev };
+                delete next[sessionId];
+                return next;
+            });
+            setRunFailures((prev) => {
                 const next = { ...prev };
                 delete next[sessionId];
                 return next;
@@ -369,7 +477,9 @@ export default function SessionsPage() {
                                 {activeGeneratingSessions.map((session) => {
                                     const generatedCount = session.id ? (runProgress[session.id] ?? 0) : 0;
                                     const expectedCount = Math.max(1, session.requestedCount);
-                                    const progressPercent = Math.min(100, Math.round((generatedCount / expectedCount) * 100));
+                                    const failedIndices = session.id ? (runFailures[session.id] ?? []) : [];
+                                    const processedCount = Math.min(expectedCount, generatedCount + failedIndices.length);
+                                    const progressPercent = Math.min(100, Math.round((processedCount / expectedCount) * 100));
                                     const isForceStopping = session.id ? forceStoppingSessionIds[session.id] === true : false;
 
                                     return (
@@ -380,6 +490,11 @@ export default function SessionsPage() {
                                                     <p className="text-xs text-zinc-300 mt-1">
                                                         Wygenerowano {generatedCount}/{expectedCount} zdjęć
                                                     </p>
+                                                    {failedIndices.length > 0 ? (
+                                                        <p className="text-xs text-red-200 mt-1">
+                                                            Nieudane ujęcia: {failedIndices.join(", ")}
+                                                        </p>
+                                                    ) : null}
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <Link href={`/sesje/${session.id}`}>

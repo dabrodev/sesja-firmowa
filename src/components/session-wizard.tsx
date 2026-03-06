@@ -498,8 +498,14 @@ export function SessionWizard({
                                                             requestedCount,
                                                         });
 
+                                                        const targetUrl = `/sesje/${startedRun.sessionId}#results`;
                                                         setCreatedSessionId(startedRun.sessionId);
-                                                        router.push(`/sesje/${startedRun.sessionId}#results`);
+                                                        router.push(targetUrl);
+                                                        window.setTimeout(() => {
+                                                            if (window.location.pathname !== `/sesje/${startedRun.sessionId}`) {
+                                                                window.location.assign(targetUrl);
+                                                            }
+                                                        }, 150);
                                                     } catch (error: unknown) {
                                                         setGenerationError(
                                                             `Błąd generowania: ${getReadableError(error, "Nie udało się uruchomić sesji.")}`

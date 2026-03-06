@@ -113,7 +113,14 @@ export async function startSessionGeneration(
                 name: "",
             });
         } else {
-            await sessionService.updateSession(activeSessionId, sessionUpdatePayload);
+            await sessionService.reserveSessionForGeneration(activeSessionId, {
+                userId: params.userId,
+                faceReferences: sessionUpdatePayload.faceReferences,
+                officeReferences: sessionUpdatePayload.officeReferences,
+                outfitReferences: sessionUpdatePayload.outfitReferences,
+                customPrompt: sessionUpdatePayload.customPrompt,
+                requestedCount: sessionUpdatePayload.requestedCount,
+            });
         }
 
         if (!activeSessionId) {

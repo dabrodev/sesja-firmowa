@@ -254,6 +254,62 @@ export const sessionService = {
         }
     },
 
+    async reserveSessionForGeneration(
+        sessionId: string,
+        params: {
+            userId: string;
+            faceReferences: string[];
+            officeReferences: string[];
+            outfitReferences: string[];
+            customPrompt: string;
+            requestedCount: number;
+        }
+    ) {
+        try {
+            await runTransaction(db, async (transaction) => {
+                const sessionRef = doc(db, "sessions", sessionId);
+                const sessionSnap = await transaction.get(sessionRef);
+
+                if (!sessionSnap.exists()) {
+                    throw new Error("Nie znaleziono sesji.");
+                }
+
+                const session = normalizeSession(sessionSnap.id, sessionSnap.data() as Record<string, unknown>);
+                const activeWorkflowInstanceId = session.activeWorkflowInstanceId?.trim() || "";
+                const activeWorkflowRunId = session.activeWorkflowRunId?.trim() || "";
+                const isAlreadyProcessing =
+                    session.status === "processing" ||
+                    activeWorkflowInstanceId.length > 0 ||
+                    activeWorkflowRunId.length > 0;
+
+                if (session.userId && session.userId !== params.userId) {
+                    throw new Error("Nie masz dostępu do tej sesji.");
+                }
+
+                if (isAlreadyProcessing) {
+                    throw new Error(
+                        "Ta sesja ma już aktywne generowanie. Poczekaj na jego zakończenie albo zatrzymaj je przed uruchomieniem kolejnego."
+                    );
+                }
+
+                transaction.update(sessionRef, {
+                    faceReferences: params.faceReferences,
+                    officeReferences: params.officeReferences,
+                    outfitReferences: params.outfitReferences,
+                    customPrompt: params.customPrompt,
+                    requestedCount: normalizeRequestedCount(params.requestedCount),
+                    status: "processing",
+                    activeWorkflowInstanceId: null,
+                    activeWorkflowRunId: null,
+                    updatedAt: serverTimestamp(),
+                });
+            });
+        } catch (error) {
+            console.error("Error reserving session for generation:", error);
+            throw error;
+        }
+    },
+
     async appendResults(sessionId: string, newResults: string[]) {
         try {
             const docRef = doc(db, "sessions", sessionId);
