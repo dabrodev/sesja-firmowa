@@ -9,6 +9,7 @@ import { useAuth } from "@/components/auth-provider";
 import { sessionService } from "@/lib/sessions";
 import { useRouter } from "next/navigation";
 import { AppHeader } from "@/components/app-header";
+import { DEFAULT_REQUESTED_COUNT, REQUESTED_COUNT_OPTIONS } from "@/lib/requested-count";
 
 const fadeInUp = {
     initial: { opacity: 0, y: 20 },
@@ -75,7 +76,7 @@ function WizardWrapper() {
                             </span>.
                         </p>
                         <p className="text-zinc-400">
-                            Liczbę nowych zdjęć (1-5) ustawisz w ostatnim kroku.
+                            Liczbę nowych zdjęć ustawisz w ostatnim kroku: {REQUESTED_COUNT_OPTIONS.join(", ")}. Domyślnie {DEFAULT_REQUESTED_COUNT}.
                         </p>
                     </div>
                 ) : (

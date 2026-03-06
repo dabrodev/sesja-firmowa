@@ -54,6 +54,14 @@ type PromptDebugPayload = {
     createdAtIso: string;
 };
 
+type WorkflowRunOutput = {
+    resultUrls: string[];
+    sessionId: string;
+    requestedCount: number;
+    failedIndices: number[];
+    promptDebug?: PromptDebugPayload;
+};
+
 function getErrorMessage(error: unknown, fallback: string): string {
     const normalized = getReadableError(error);
     return normalized || fallback;
@@ -108,12 +116,20 @@ const CORS_HEADERS = {
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
+const DEFAULT_REQUESTED_COUNT = 4;
+const MAX_REQUESTED_COUNT = 10;
+
 const DEFAULT_VARIATIONS = [
     "Scene: side close-up (one-sided framing) of person actively typing or writing notes at their desk, candid moment of focused work. Maintain their EXACT natural facial expression from the reference photos — do not alter it.",
     "Scene: medium 3/4 shot of person working at laptop or reviewing documents at their desk, slightly angled, candid moment of focused work. Maintain their EXACT natural facial expression from the reference photos.",
     "Scene: top-down perspective (slightly from above) of person reviewing notes, planning tasks, or annotating documents at workspace. Maintain their EXACT natural facial expression from the reference photos.",
     "Scene: low-angle perspective (slightly from below) during active work discussion or presenting near desk, natural engaged posture, documentary style. Maintain their EXACT natural facial expression from the reference photos.",
     "Scene: person moving through office corridor while engaged in work context (e.g., carrying documents or heading to a meeting), natural motion freeze, business editorial framing. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: medium shot of person seated at a meeting table during a live work discussion, listening or responding naturally with subtle hand activity. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: person standing near a window, bookshelf, or credenza while reviewing printed notes or a tablet, candid editorial office moment. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: over-the-shoulder office angle with person focused on a laptop or monitor, face still visible in partial profile, realistic workplace storytelling. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: person leaning lightly against desk or conference table while explaining an idea to someone just out of frame, natural conversational work energy. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: person entering or leaving a meeting room with laptop, notebook, or documents in hand, environmental business framing with natural movement. Maintain their EXACT natural facial expression from the reference photos.",
 ];
 
 const EXPLICIT_WIDE_FRAMING_VARIATIONS = [
@@ -122,11 +138,16 @@ const EXPLICIT_WIDE_FRAMING_VARIATIONS = [
     "Scene: top-down perspective (slightly from above) of person organizing documents/notebook/tablet at desk. Keep a wider composition that captures clear full posture in context. Maintain their EXACT natural facial expression from the reference photos.",
     "Scene: low-angle perspective (slightly from below) of person in active work conversation or presenting near workspace. Use medium-wide to wide framing that preserves body context naturally. Maintain their EXACT natural facial expression from the reference photos.",
     "Scene: person moving through office corridor while engaged in work context (e.g., carrying documents or heading to a meeting), documentary-style motion freeze. Use full-body framing whenever physically possible, still candid and work-focused. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: person seated at a meeting table during an active discussion. Use a wider environmental frame that captures most of the seated posture and surrounding workspace while staying candid. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: person standing by a window, bookshelf, or office credenza while reviewing notes or tablet. Use medium-wide to full-body framing whenever physically possible, still grounded in realistic office action. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: over-the-shoulder office view while person works at laptop or monitor. Keep a wider environmental frame that shows upper body or fuller silhouette in context, without losing identity accuracy. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: person explaining something beside a desk or conference table to someone just out of frame. Use wider candid framing that captures the full stance or most of the body while preserving believable work posture. Maintain their EXACT natural facial expression from the reference photos.",
+    "Scene: person entering or leaving a meeting room with laptop, notebook, or documents in hand. Use wide environmental framing with full-body composition whenever physically possible, still realistic and work-focused. Maintain their EXACT natural facial expression from the reference photos.",
 ];
 
 function normalizeRequestedCount(value: number | undefined): number {
-    if (typeof value !== "number" || !Number.isFinite(value)) return 4;
-    return Math.min(5, Math.max(1, Math.round(value)));
+    if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_REQUESTED_COUNT;
+    return Math.min(MAX_REQUESTED_COUNT, Math.max(1, Math.round(value)));
 }
 
 function shouldPrioritizeOutfit(customPrompt: string): boolean {
@@ -169,6 +190,22 @@ function buildArchivedKey(key: string): string {
     const dayStamp = new Date().toISOString().slice(0, 10);
     const safeKey = key.replace(/^\/+/, "");
     return `archived/${dayStamp}/${Date.now()}-${crypto.randomUUID()}-${safeKey}`;
+}
+
+function parsePhotoIndexFromResultKey(key: string): number | null {
+    const match = key.match(/(?:^|\/)photo-(\d+)\.jpg$/);
+    if (!match) return null;
+    const parsed = Number.parseInt(match[1], 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    return parsed;
+}
+
+function parseFailedIndexFromResultKey(key: string): number | null {
+    const match = key.match(/(?:^|\/)failed-(\d+)\.json$/);
+    if (!match) return null;
+    const parsed = Number.parseInt(match[1], 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    return parsed;
 }
 
 function extractWorkerFileKey(fileUrl: string): string | null {
@@ -231,8 +268,9 @@ export class GenerationWorkflow extends WorkflowEntrypoint<Env, GenerateParams> 
 
         const workerUrl = WORKER_URL;
         const resultKeys: string[] = [];
+        const failedIndices: number[] = [];
 
-        // Generate requested number of variations (1-5)
+        // Generate requested number of variations (up to 10)
         const variationPool = prioritizeOutfit
             ? EXPLICIT_WIDE_FRAMING_VARIATIONS
             : DEFAULT_VARIATIONS;
@@ -304,9 +342,27 @@ export class GenerationWorkflow extends WorkflowEntrypoint<Env, GenerateParams> 
 
                 if (key) resultKeys.push(key);
             } catch (error) {
+                failedIndices.push(i + 1);
                 console.error(
                     `[Workflow] Variation ${i + 1} failed (${variation}): ${getReadableError(error) || "unknown error"}`
                 );
+                try {
+                    const failureKey = `results/${sessionId}/${safeRunId}/failed-${i + 1}.json`;
+                    await this.env.MEDIA_BUCKET.put(
+                        failureKey,
+                        JSON.stringify({
+                            index: i + 1,
+                            variation,
+                            error: getReadableError(error) || "unknown error",
+                            failedAtIso: new Date().toISOString(),
+                        }),
+                        { httpMetadata: { contentType: "application/json" } }
+                    );
+                } catch (markerError) {
+                    console.warn(
+                        `[Workflow] Failed to persist failure marker for variation ${i + 1}: ${getReadableError(markerError) || "unknown error"}`
+                    );
+                }
             }
         }
 
@@ -319,7 +375,13 @@ export class GenerationWorkflow extends WorkflowEntrypoint<Env, GenerateParams> 
         // Build result URLs (served via Worker's /file endpoint)
         const resultUrls = resultKeys.map(k => `${workerUrl}/file?key=${encodeURIComponent(k)}`);
 
-        return { resultUrls, sessionId, promptDebug };
+        return {
+            resultUrls,
+            sessionId,
+            requestedCount: safeRequestedCount,
+            failedIndices,
+            promptDebug,
+        };
     }
 }
 
@@ -609,24 +671,32 @@ EDIT INSTRUCTION: ${prompt}`,
             try {
                 const instance = await env.GENERATION_WORKFLOW.get(instanceId);
                 const status = await instance.status();
-                const statusOutput = status.output as { resultUrls?: string[]; promptDebug?: PromptDebugPayload } | undefined;
+                const statusOutput = status.output as WorkflowRunOutput | undefined;
                 const workflowResultUrls = statusOutput?.resultUrls ?? [];
+                let discoveredFailedIndices: number[] = [];
 
                 let discoveredUrls: string[] = [];
                 if (status.status !== "complete" || workflowResultUrls.length === 0) {
                     const baseId = sessionId || instanceId;
                     const prefix = runId ? `results/${baseId}/${runId}/` : `results/${baseId}/`;
                     const list = await env.MEDIA_BUCKET.list({ prefix });
-                    discoveredUrls = list.objects
-                        .sort((a, b) => a.key.localeCompare(b.key))
-                        .map((o) => `${WORKER_URL}/file?key=${encodeURIComponent(o.key)}`);
+                    const sortedObjects = list.objects.sort((a, b) => a.key.localeCompare(b.key));
+                    discoveredUrls = sortedObjects
+                        .filter((object) => parsePhotoIndexFromResultKey(object.key) !== null)
+                        .map((object) => `${WORKER_URL}/file?key=${encodeURIComponent(object.key)}`);
+                    discoveredFailedIndices = sortedObjects
+                        .map((object) => parseFailedIndexFromResultKey(object.key))
+                        .filter((value): value is number => typeof value === "number");
                 }
 
                 const finalResultUrls =
                     workflowResultUrls.length > 0 ? workflowResultUrls : discoveredUrls;
+                const finalFailedIndices = Array.from(
+                    new Set([...(statusOutput?.failedIndices ?? []), ...discoveredFailedIndices])
+                ).sort((a, b) => a - b);
                 const finalOutput = statusOutput
-                    ? { ...statusOutput, resultUrls: finalResultUrls }
-                    : { resultUrls: finalResultUrls };
+                    ? { ...statusOutput, resultUrls: finalResultUrls, failedIndices: finalFailedIndices }
+                    : { resultUrls: finalResultUrls, failedIndices: finalFailedIndices };
 
                 return new Response(JSON.stringify({
                     status: status.status,

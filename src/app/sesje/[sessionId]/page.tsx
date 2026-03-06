@@ -26,8 +26,54 @@ import { ImageWithPlaceholder } from "@/components/image-with-placeholder";
 import { downloadFile } from "@/lib/download";
 import { assetService } from "@/lib/assets";
 import { AppHeader } from "@/components/app-header";
+import {
+    DEFAULT_REQUESTED_COUNT,
+    formatPhotoCountLabel,
+    getRequestedCountOptions,
+} from "@/lib/requested-count";
+import {
+    SESSION_GENERATION_COST_PER_PHOTO,
+    startSessionGeneration,
+} from "@/lib/session-generation";
 
 const STALE_PROCESSING_TIMEOUT_MS = 5 * 60 * 1000;
+
+function extractShotNumberFromUrl(url: string): number | null {
+    const match = url.match(/photo-(\d+)\.jpg/i);
+    if (!match) return null;
+    const parsed = Number.parseInt(match[1], 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    return parsed;
+}
+
+function countGeneratedShots(urls: string[]): number {
+    const indexed = new Set<number>();
+    const fallback = new Set<string>();
+    for (const url of urls) {
+        if (!url) continue;
+        const shot = extractShotNumberFromUrl(url);
+        if (shot !== null) {
+            indexed.add(shot);
+        } else {
+            fallback.add(url);
+        }
+    }
+    return indexed.size + fallback.size;
+}
+
+function normalizeFailedIndices(indices: unknown, requestedCount: number): number[] {
+    if (!Array.isArray(indices)) return [];
+    return Array.from(
+        new Set(
+            indices.flatMap((value) => {
+                if (typeof value !== "number" || !Number.isFinite(value)) return [];
+                const rounded = Math.round(value);
+                if (rounded < 1 || rounded > requestedCount) return [];
+                return [rounded];
+            })
+        )
+    ).sort((a, b) => a - b);
+}
 
 export default function SessionDetailsPage({ params }: { params: Promise<{ sessionId: string }> }) {
     const { sessionId } = use(params);
@@ -41,12 +87,14 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
     const [officeReferencesDraft, setOfficeReferencesDraft] = useState<PhotoAsset[]>([]);
     const [outfitReferencesDraft, setOutfitReferencesDraft] = useState<PhotoAsset[]>([]);
     const [customPromptDraft, setCustomPromptDraft] = useState("");
-    const [requestedCountDraft, setRequestedCountDraft] = useState(4);
+    const [requestedCountDraft, setRequestedCountDraft] = useState(DEFAULT_REQUESTED_COUNT);
     const [isSyncingResults, setIsSyncingResults] = useState(false);
     const [currentRunGeneratedCount, setCurrentRunGeneratedCount] = useState(0);
+    const [currentRunFailedIndices, setCurrentRunFailedIndices] = useState<number[]>([]);
     const [deletingResultIndex, setDeletingResultIndex] = useState<number | null>(null);
     const [isDeletingSession, setIsDeletingSession] = useState(false);
     const [isForceStoppingSession, setIsForceStoppingSession] = useState(false);
+    const [isQuickGenerating, setIsQuickGenerating] = useState(false);
     const [selectedResultIndex, setSelectedResultIndex] = useState<number | null>(null);
 
     const resultCount = session?.results.length ?? 0;
@@ -213,12 +261,19 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
 
                 const data = await response.json() as {
                     status: "queued" | "running" | "complete" | "errored" | "terminated";
-                    output?: { resultUrls?: string[]; promptDebug?: PromptRunTrace };
+                    output?: {
+                        resultUrls?: string[];
+                        failedIndices?: number[];
+                        promptDebug?: PromptRunTrace;
+                    };
                 };
                 if (cancelled) return;
 
                 const workflowResults = data.output?.resultUrls ?? [];
-                setCurrentRunGeneratedCount(workflowResults.length);
+                const generatedCount = countGeneratedShots(workflowResults);
+                const failedIndices = normalizeFailedIndices(data.output?.failedIndices, Math.max(1, session.requestedCount));
+                setCurrentRunGeneratedCount(generatedCount);
+                setCurrentRunFailedIndices(failedIndices);
 
                 const promptDebug = data.output?.promptDebug;
                 if (promptDebug) {
@@ -241,6 +296,14 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                 const hasNewResults = mergedResults.length !== session.results.length;
 
                 if (data.status === "complete") {
+                    if (workflowRunId) {
+                        await sessionService.settleRunBilling({
+                            sessionId: activeSessionId,
+                            uid: user.uid,
+                            runId: workflowRunId,
+                            generatedCount,
+                        });
+                    }
                     const shouldFinalize =
                         hasNewResults ||
                         session.status !== "completed" ||
@@ -269,23 +332,41 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                         }
                     }
                     setCurrentRunGeneratedCount(0);
+                    setCurrentRunFailedIndices([]);
                     return;
                 }
 
                 if (data.status === "errored" || data.status === "terminated") {
+                    if (workflowRunId) {
+                        await sessionService.settleRunBilling({
+                            sessionId: activeSessionId,
+                            uid: user.uid,
+                            runId: workflowRunId,
+                            generatedCount,
+                        });
+                    }
+                    const terminalStatus: Photosession["status"] = generatedCount > 0 ? "completed" : "failed";
                     await sessionService.updateSession(activeSessionId, {
-                        status: "failed",
+                        status: terminalStatus,
+                        results: mergedResults,
                         activeWorkflowInstanceId: null,
                         activeWorkflowRunId: null,
                     });
                     if (!cancelled) {
                         setSession((prev) =>
                             prev
-                                ? { ...prev, status: "failed", activeWorkflowInstanceId: null, activeWorkflowRunId: null }
+                                ? {
+                                    ...prev,
+                                    status: terminalStatus,
+                                    results: mergedResults,
+                                    activeWorkflowInstanceId: null,
+                                    activeWorkflowRunId: null,
+                                }
                                 : prev
                         );
                     }
                     setCurrentRunGeneratedCount(0);
+                    setCurrentRunFailedIndices([]);
                     return;
                 }
 
@@ -332,6 +413,7 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
         session?.id,
         session?.status,
         session?.results,
+        session?.requestedCount,
         session?.activeWorkflowInstanceId,
         session?.activeWorkflowRunId,
         session?.updatedAt,
@@ -544,7 +626,7 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
     };
 
     const handleForceStopSession = async () => {
-        if (!session?.id || session.status !== "processing") return;
+        if (!user || !session?.id || session.status !== "processing") return;
 
         const confirmed = confirm(
             "Wymusić zatrzymanie tej sesji? Workflow zostanie odłączony od sesji, a sesję będzie można usunąć lub kontynuować ręcznie."
@@ -556,6 +638,14 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
 
         setIsForceStoppingSession(true);
         try {
+            if (session.activeWorkflowRunId) {
+                await sessionService.settleRunBilling({
+                    sessionId: session.id,
+                    uid: user.uid,
+                    runId: session.activeWorkflowRunId,
+                    generatedCount: currentRunGeneratedCount,
+                });
+            }
             await sessionService.updateSession(session.id, {
                 status: targetStatus,
                 activeWorkflowInstanceId: null,
@@ -572,11 +662,99 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                     : prev
             );
             setCurrentRunGeneratedCount(0);
+            setCurrentRunFailedIndices([]);
         } catch (error) {
             console.error("Error force stopping session:", error);
             alert("Nie udało się zatrzymać sesji. Spróbuj ponownie.");
         } finally {
             setIsForceStoppingSession(false);
+        }
+    };
+
+    const openParametersEditor = useCallback(() => {
+        if (!session) return;
+
+        resetReferenceDraft(session);
+        setIsEditingReferences(true);
+
+        requestAnimationFrame(() => {
+            document.getElementById("session-parameters")?.scrollIntoView({
+                behavior: "smooth",
+                block: "start",
+            });
+        });
+    }, [resetReferenceDraft, session]);
+
+    const handleQuickContinueSession = async () => {
+        if (!user || !session?.id || session.status === "processing" || isQuickGenerating || isEditingReferences) return;
+
+        const quickGenerationCost = session.requestedCount * SESSION_GENERATION_COST_PER_PHOTO;
+        const availableCredits = userProfile?.credits ?? 0;
+        const missingCredits = Math.max(0, quickGenerationCost - availableCredits);
+
+        if (availableCredits < quickGenerationCost) {
+            alert(`Brakuje ${missingCredits} PKT, aby dodać kolejne zdjęcia na tych samych ustawieniach.`);
+            return;
+        }
+
+        const confirmed = confirm(
+            `Dodać ${formatPhotoCountLabel(session.requestedCount)} na tych samych ustawieniach? Koszt: ${quickGenerationCost} PKT.`
+        );
+        if (!confirmed) return;
+
+        setIsQuickGenerating(true);
+        try {
+            const startedRun = await startSessionGeneration({
+                userId: user.uid,
+                existingSessionId: session.id,
+                existingResultsCount: session.results.length,
+                faceReferences: {
+                    urls: session.faceReferences,
+                    keys: session.faceReferences
+                        .map((reference) => extractR2KeyFromReference(reference))
+                        .filter((value): value is string => typeof value === "string" && value.trim().length > 0),
+                },
+                officeReferences: {
+                    urls: session.officeReferences.slice(0, 1),
+                    keys: session.officeReferences
+                        .slice(0, 1)
+                        .map((reference) => extractR2KeyFromReference(reference))
+                        .filter((value): value is string => typeof value === "string" && value.trim().length > 0),
+                },
+                outfitReferences: {
+                    urls: session.outfitReferences,
+                    keys: session.outfitReferences
+                        .map((reference) => extractR2KeyFromReference(reference))
+                        .filter((value): value is string => typeof value === "string" && value.trim().length > 0),
+                },
+                customPrompt: session.customPrompt,
+                requestedCount: session.requestedCount,
+            });
+
+            setSession((prev) =>
+                prev
+                    ? {
+                        ...prev,
+                        status: "processing",
+                        activeWorkflowInstanceId: startedRun.instanceId,
+                        activeWorkflowRunId: startedRun.runId,
+                    }
+                    : prev
+            );
+            setCurrentRunGeneratedCount(0);
+            setCurrentRunFailedIndices([]);
+
+            requestAnimationFrame(() => {
+                document.getElementById("results-section")?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                });
+            });
+        } catch (error) {
+            console.error("Error starting quick continuation:", error);
+            alert(error instanceof Error ? error.message : "Nie udało się uruchomić kolejnej generacji.");
+        } finally {
+            setIsQuickGenerating(false);
         }
     };
 
@@ -589,6 +767,11 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
     }
 
     if (!session || !user) return null;
+
+    const quickGenerationCost = session.requestedCount * SESSION_GENERATION_COST_PER_PHOTO;
+    const availableQuickCredits = userProfile?.credits ?? 0;
+    const missingQuickCredits = Math.max(0, quickGenerationCost - availableQuickCredits);
+    const hasEnoughCreditsForQuickContinue = availableQuickCredits >= quickGenerationCost;
 
     const noResultsTitle =
         session.status === "failed"
@@ -605,12 +788,22 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
     const latestPromptRun = session.promptRuns[0] ?? null;
     const isProcessing = session.status === "processing";
     const expectedCurrentRunCount = isProcessing ? Math.max(1, session.requestedCount) : 0;
+    const currentRunFailedCount = isProcessing ? currentRunFailedIndices.length : 0;
+    const currentRunProcessedCount = isProcessing
+        ? Math.min(expectedCurrentRunCount, currentRunGeneratedCount + currentRunFailedCount)
+        : 0;
     const missingCurrentRunCount = isProcessing
-        ? Math.max(expectedCurrentRunCount - currentRunGeneratedCount, 0)
+        ? Math.max(expectedCurrentRunCount - currentRunProcessedCount, 0)
         : 0;
     const currentRunProgressPercent = expectedCurrentRunCount
-        ? Math.min(100, Math.round((currentRunGeneratedCount / expectedCurrentRunCount) * 100))
+        ? Math.min(100, Math.round((currentRunProcessedCount / expectedCurrentRunCount) * 100))
         : 0;
+    const requestedCountOptions = getRequestedCountOptions(requestedCountDraft);
+    const missingRunShotNumbers = isProcessing
+        ? Array.from({ length: expectedCurrentRunCount }, (_, index) => index + 1).filter(
+            (shotNumber) => !currentRunFailedIndices.includes(shotNumber)
+        ).slice(currentRunGeneratedCount)
+        : [];
 
     return (
         <div className="min-h-screen bg-[#020617] text-white selection:bg-blue-500/30 font-sans pb-20">
@@ -644,17 +837,29 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                     </div>
                     <div className="flex-shrink-0">
                         <div className="flex flex-wrap gap-2">
-                            <Link href={`/generator?sessionId=${session.id}`}>
-                                <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-lg shadow-blue-500/20">
-                                    Kontynuuj sesję (+{session.requestedCount} zdjęć)
-                                </Button>
-                            </Link>
+                            <Button
+                                className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/20 hover:from-blue-500 hover:to-indigo-500"
+                                onClick={() => void handleQuickContinueSession()}
+                                disabled={session.status === "processing" || isQuickGenerating || isEditingReferences || !hasEnoughCreditsForQuickContinue}
+                            >
+                                {isQuickGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                Dodaj więcej zdjęć (+{session.requestedCount})
+                            </Button>
+                            <Button
+                                variant="outline"
+                                className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                                onClick={openParametersEditor}
+                                disabled={isSavingReferences || isQuickGenerating}
+                            >
+                                <PencilLine className="mr-2 h-4 w-4" />
+                                Zmień parametry
+                            </Button>
                             {session.status === "processing" ? (
                                 <Button
                                     variant="outline"
                                     className="border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20 hover:text-amber-100"
                                     onClick={() => void handleForceStopSession()}
-                                    disabled={isForceStoppingSession || isDeletingSession}
+                                    disabled={isForceStoppingSession || isDeletingSession || isQuickGenerating}
                                 >
                                     {isForceStoppingSession ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Square className="mr-2 h-4 w-4" />}
                                     Wymuś zatrzymanie
@@ -664,18 +869,23 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                 variant="outline"
                                 className="border-red-500/40 bg-red-500/10 text-red-200 hover:bg-red-500/20 hover:text-red-100"
                                 onClick={() => void handleDeleteSession()}
-                                disabled={isDeletingSession || session.status === "processing"}
+                                disabled={isDeletingSession || session.status === "processing" || isQuickGenerating}
                             >
                                 {isDeletingSession ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
                                 Usuń sesję
                             </Button>
                         </div>
+                        {!hasEnoughCreditsForQuickContinue && session.status !== "processing" ? (
+                            <p className="mt-3 text-right text-xs text-red-200">
+                                Brakuje {missingQuickCredits} PKT, aby dodać więcej zdjęć bez zmiany parametrów.
+                            </p>
+                        ) : null}
                     </div>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Main Results Column (Takes up 2/3 on desktop) */}
-                    <div className="lg:col-span-2 space-y-6">
+                    <div id="results-section" className="lg:col-span-2 space-y-6">
                         <h2 className="text-xl font-semibold flex items-center gap-2">
                             <ImageIcon className="h-5 w-5 text-blue-400" />
                             Wygenerowane Fotografie
@@ -699,6 +909,11 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                         {" "}
                                         zdjęć.
                                     </p>
+                                    {currentRunFailedCount > 0 ? (
+                                        <p className="text-xs text-red-200">
+                                            Nieudane ujęcia w tym runie: {currentRunFailedIndices.join(", ")}.
+                                        </p>
+                                    ) : null}
                                     <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
                                         <div
                                             className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-500"
@@ -807,30 +1022,51 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                     </motion.div>
                                 ))}
                                 {isProcessing
-                                    ? Array.from({ length: missingCurrentRunCount }).map((_, idx) => (
-                                        <div
-                                            key={`placeholder-${idx}`}
-                                            className="relative rounded-2xl overflow-hidden border border-dashed border-blue-500/30 bg-blue-500/5 aspect-[3/4] flex items-center justify-center"
-                                        >
-                                            <div className="text-center">
-                                                <Loader2 className="h-6 w-6 animate-spin text-blue-400 mx-auto mb-2" />
-                                                <p className="text-xs text-blue-100">
-                                                    Generowanie
-                                                    {" "}
-                                                    {Math.min(currentRunGeneratedCount + idx + 1, expectedCurrentRunCount)}
-                                                    /
-                                                    {expectedCurrentRunCount}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    ))
+                                    ? (
+                                        <>
+                                            {currentRunFailedIndices.map((failedIndex) => (
+                                                <div
+                                                    key={`failed-${failedIndex}`}
+                                                    className="relative rounded-2xl overflow-hidden border border-dashed border-red-500/40 bg-red-500/10 aspect-[3/4] flex items-center justify-center"
+                                                >
+                                                    <div className="text-center px-4">
+                                                        <div className="mx-auto mb-2 h-3 w-3 rounded-full bg-red-300" />
+                                                        <p className="text-xs text-red-100">
+                                                            Ujęcie {failedIndex}/{expectedCurrentRunCount} nieudane
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {Array.from({ length: missingCurrentRunCount }).map((_, idx) => {
+                                                const shotNumber = missingRunShotNumbers[idx]
+                                                    ?? Math.min(currentRunProcessedCount + idx + 1, expectedCurrentRunCount);
+                                                return (
+                                                    <div
+                                                        key={`placeholder-${idx}`}
+                                                        className="relative rounded-2xl overflow-hidden border border-dashed border-blue-500/30 bg-blue-500/5 aspect-[3/4] flex items-center justify-center"
+                                                    >
+                                                        <div className="text-center">
+                                                            <Loader2 className="h-6 w-6 animate-spin text-blue-400 mx-auto mb-2" />
+                                                            <p className="text-xs text-blue-100">
+                                                                Generowanie
+                                                                {" "}
+                                                                {shotNumber}
+                                                                /
+                                                                {expectedCurrentRunCount}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </>
+                                    )
                                     : null}
                             </div>
                         )}
                     </div>
 
                     {/* Sidebar Reference Column */}
-                    <div className="space-y-6">
+                    <div id="session-parameters" className="space-y-6">
                         <div className="flex items-center justify-between gap-3">
                             <h2 className="text-xl font-semibold">Użyte materiały</h2>
                             {!isEditingReferences ? (
@@ -838,12 +1074,9 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                     variant="outline"
                                     size="sm"
                                     className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white"
-                                    onClick={() => {
-                                        resetReferenceDraft(session);
-                                        setIsEditingReferences(true);
-                                    }}
+                                    onClick={openParametersEditor}
                                 >
-                                    <PencilLine className="mr-2 h-4 w-4" /> Wymień materiały
+                                    <PencilLine className="mr-2 h-4 w-4" /> Zmień parametry
                                 </Button>
                             ) : null}
                         </div>
@@ -907,9 +1140,9 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                                         <SelectValue placeholder="Wybierz liczbę zdjęć" />
                                                     </SelectTrigger>
                                                     <SelectContent className="border-white/10 bg-[#0f172a] text-white">
-                                                        {["1", "2", "3", "4", "5"].map((value) => (
-                                                            <SelectItem key={value} value={value}>
-                                                                {value} zdjęć
+                                                        {requestedCountOptions.map((value) => (
+                                                            <SelectItem key={value} value={String(value)}>
+                                                                {formatPhotoCountLabel(value)}
                                                             </SelectItem>
                                                         ))}
                                                     </SelectContent>
@@ -1076,14 +1309,25 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                             </div>
                                         ) : null}
 
-                                        <Link href={`/generator?sessionId=${session.id}`}>
+                                        <div className="flex flex-col gap-2">
+                                            <Button
+                                                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/20 hover:from-blue-500 hover:to-indigo-500"
+                                                onClick={() => void handleQuickContinueSession()}
+                                                disabled={session.status === "processing" || isQuickGenerating || isEditingReferences || !hasEnoughCreditsForQuickContinue}
+                                            >
+                                                {isQuickGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                                Dodaj więcej zdjęć (+{session.requestedCount})
+                                            </Button>
                                             <Button
                                                 variant="outline"
                                                 className="w-full border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                                                onClick={openParametersEditor}
+                                                disabled={isSavingReferences || isQuickGenerating}
                                             >
-                                                Kontynuuj tę sesję (+{session.requestedCount} zdjęć)
+                                                <PencilLine className="mr-2 h-4 w-4" />
+                                                Kontynuuj z nowymi parametrami
                                             </Button>
-                                        </Link>
+                                        </div>
                                     </>
                                 )}
                             </CardContent>

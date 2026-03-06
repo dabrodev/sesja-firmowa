@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { normalizeRequestedCount } from "@/lib/requested-count";
 
 type GenerateRequestBody = {
     sessionId: string;
@@ -10,11 +11,6 @@ type GenerateRequestBody = {
     requestedCount?: number;
     runId?: string;
 };
-
-function normalizeRequestedCount(count: number | undefined): number {
-    if (typeof count !== "number" || !Number.isFinite(count)) return 4;
-    return Math.min(5, Math.max(1, Math.round(count)));
-}
 
 function getErrorMessage(error: unknown, fallback: string): string {
     return error instanceof Error ? error.message : fallback;
