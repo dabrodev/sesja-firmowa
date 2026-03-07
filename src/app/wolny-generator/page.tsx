@@ -15,6 +15,7 @@ import { AppHeader } from "@/components/app-header";
 import { sessionService } from "@/lib/sessions";
 import { CUSTOM_GENERATION_COST } from "@/lib/custom-generation";
 import { userService } from "@/lib/users";
+import { extractR2KeyFromReference } from "@/lib/reference-assets";
 
 function CustomGeneratorContent() {
     const { user, userProfile, loading, logout } = useAuth();
@@ -46,6 +47,7 @@ function CustomGeneratorContent() {
     const availableCredits = userProfile?.credits ?? 0;
     const missingCredits = Math.max(0, CUSTOM_GENERATION_COST - availableCredits);
     const hasEnoughCredits = availableCredits >= CUSTOM_GENERATION_COST;
+    const [resolvedSourceSessionId, setResolvedSourceSessionId] = useState(sourceSessionId);
 
     const addAsset = (asset: PhotoAsset) => setAssets(prev => [...prev, asset]);
     const removeAsset = (id: string) => setAssets(prev => prev.filter(a => a.id !== id));
@@ -237,6 +239,44 @@ function CustomGeneratorContent() {
         }
     }, [isEditMode, resolvedEditImageUrl]);
 
+    useEffect(() => {
+        setResolvedSourceSessionId(sourceSessionId);
+    }, [sourceSessionId]);
+
+    const resolveSourceSessionId = useCallback(async (): Promise<string> => {
+        if (sourceSessionId) {
+            return sourceSessionId;
+        }
+        if (!user?.uid || !isEditMode) {
+            return "";
+        }
+
+        const candidateUrls = [editImageUrl, resolvedEditImageUrl].filter((value) => value.length > 0);
+        const candidateKeys = [
+            editImageKey,
+            extractR2KeyFromReference(editImageUrl) ?? "",
+            extractR2KeyFromReference(resolvedEditImageUrl) ?? "",
+        ].filter((value) => value.length > 0);
+
+        if (candidateUrls.length === 0 && candidateKeys.length === 0) {
+            return "";
+        }
+
+        const sessions = await sessionService.getUserSessions(user.uid);
+        const matchedSession = sessions.find((session) =>
+            session.results.some((resultUrl) => {
+                if (candidateUrls.includes(resultUrl)) {
+                    return true;
+                }
+
+                const resultKey = extractR2KeyFromReference(resultUrl);
+                return Boolean(resultKey && candidateKeys.includes(resultKey));
+            })
+        );
+
+        return matchedSession?.id ?? "";
+    }, [editImageKey, editImageUrl, isEditMode, resolvedEditImageUrl, sourceSessionId, user?.uid]);
+
     const handleGenerate = async () => {
         if (!prompt.trim()) return;
         if (!user) {
@@ -269,7 +309,15 @@ function CustomGeneratorContent() {
         setSessionSaveMessage(null);
 
         let didChargeCredits = false;
+        let effectiveSourceSessionId = resolvedSourceSessionId;
         try {
+            if (isEditMode && !effectiveSourceSessionId) {
+                effectiveSourceSessionId = await resolveSourceSessionId();
+                if (effectiveSourceSessionId) {
+                    setResolvedSourceSessionId(effectiveSourceSessionId);
+                }
+            }
+
             await userService.chargeCredits(user.uid, CUSTOM_GENERATION_COST);
             didChargeCredits = true;
 
@@ -293,9 +341,9 @@ function CustomGeneratorContent() {
             const data = await res.json() as { url: string };
             setResultUrl(data.url);
 
-            if (isEditMode && sourceSessionId) {
+            if (isEditMode && effectiveSourceSessionId) {
                 try {
-                    await sessionService.appendResults(sourceSessionId, [data.url]);
+                    await sessionService.appendResults(effectiveSourceSessionId, [data.url]);
                     setSessionSaveStatus("saved");
                     setSessionSaveMessage("Nowe zdjęcie zostało automatycznie dodane do sesji źródłowej.");
                 } catch (sessionError) {
@@ -303,6 +351,9 @@ function CustomGeneratorContent() {
                     setSessionSaveStatus("failed");
                     setSessionSaveMessage("Zdjęcie wygenerowano, ale nie udało się dopisać go do sesji źródłowej.");
                 }
+            } else if (isEditMode) {
+                setSessionSaveStatus("failed");
+                setSessionSaveMessage("Zdjęcie wygenerowano, ale nie udało się ustalić sesji źródłowej.");
             }
         } catch (err: unknown) {
             console.error("Failed to generate custom image:", err);
@@ -521,14 +572,14 @@ function CustomGeneratorContent() {
                                 >
                                     <div className="flex flex-wrap items-center justify-between gap-3">
                                         <span>{sessionSaveMessage}</span>
-                                        {sourceSessionId ? (
+                                        {resolvedSourceSessionId ? (
                                             <Button
                                                 size="sm"
                                                 variant="outline"
                                                 className="border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
                                                 asChild
                                             >
-                                                <Link href={`/sesje/${sourceSessionId}`}>Przejdź do sesji</Link>
+                                                <Link href={`/sesje/${resolvedSourceSessionId}`}>Przejdź do sesji</Link>
                                             </Button>
                                         ) : null}
                                     </div>
