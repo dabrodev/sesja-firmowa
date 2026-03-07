@@ -168,10 +168,11 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
         const editKey = extractR2KeyFromReference(resultUrl);
         const editParams = new URLSearchParams({
             edit: resultUrl,
+            sessionId: session?.id ?? sessionId,
             ...(editKey ? { editKey } : {}),
         });
         router.push(`/wolny-generator?${editParams.toString()}`);
-    }, [router]);
+    }, [router, session?.id, sessionId]);
 
     useEffect(() => {
         if (selectedResultIndex === null) return;

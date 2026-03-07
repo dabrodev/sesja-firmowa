@@ -1,6 +1,7 @@
 "use client";
 
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, Image as ImageIcon, Loader2, PencilLine, RotateCcw } from "lucide-react";
@@ -11,6 +12,7 @@ import { PhotoUploader } from "@/components/photo-uploader";
 import { useAuth } from "@/components/auth-provider";
 import { PhotoAsset } from "@/lib/store";
 import { AppHeader } from "@/components/app-header";
+import { sessionService } from "@/lib/sessions";
 
 function CustomGeneratorContent() {
     const { user, userProfile, loading, logout } = useAuth();
@@ -28,6 +30,8 @@ function CustomGeneratorContent() {
     const [isPainting, setIsPainting] = useState(false);
     const [hasMask, setHasMask] = useState(false);
     const [maskReady, setMaskReady] = useState(false);
+    const [sessionSaveStatus, setSessionSaveStatus] = useState<"idle" | "saved" | "failed">("idle");
+    const [sessionSaveMessage, setSessionSaveMessage] = useState<string | null>(null);
 
     const baseImageRef = useRef<HTMLImageElement | null>(null);
     const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -35,6 +39,7 @@ function CustomGeneratorContent() {
 
     const editImageUrl = useMemo(() => searchParams.get("edit")?.trim() ?? "", [searchParams]);
     const editImageKey = useMemo(() => searchParams.get("editKey")?.trim() ?? "", [searchParams]);
+    const sourceSessionId = useMemo(() => searchParams.get("sessionId")?.trim() ?? "", [searchParams]);
     const isEditMode = editImageUrl.length > 0 || editImageKey.length > 0;
 
     const addAsset = (asset: PhotoAsset) => setAssets(prev => [...prev, asset]);
@@ -247,6 +252,8 @@ function CustomGeneratorContent() {
         setIsGenerating(true);
         setError(null);
         setResultUrl(null);
+        setSessionSaveStatus("idle");
+        setSessionSaveMessage(null);
 
         try {
             const res = await fetch("/api/generate-custom", {
@@ -268,6 +275,18 @@ function CustomGeneratorContent() {
 
             const data = await res.json() as { url: string };
             setResultUrl(data.url);
+
+            if (isEditMode && sourceSessionId) {
+                try {
+                    await sessionService.appendResults(sourceSessionId, [data.url]);
+                    setSessionSaveStatus("saved");
+                    setSessionSaveMessage("Nowe zdjęcie zostało automatycznie dodane do sesji źródłowej.");
+                } catch (sessionError) {
+                    console.error("Failed to attach edited image to source session:", sessionError);
+                    setSessionSaveStatus("failed");
+                    setSessionSaveMessage("Zdjęcie wygenerowano, ale nie udało się dopisać go do sesji źródłowej.");
+                }
+            }
         } catch (err: unknown) {
             console.error("Failed to generate custom image:", err);
             setError(err instanceof Error ? err.message : "Błąd generowania");
@@ -456,6 +475,29 @@ function CustomGeneratorContent() {
                                 <ImageIcon className="h-5 w-5 text-blue-400" />
                                 {isEditMode ? "Wynik Edycji" : "Wynik Generowania"}
                             </h3>
+                            {sessionSaveMessage ? (
+                                <div
+                                    className={
+                                        sessionSaveStatus === "saved"
+                                            ? "rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100"
+                                            : "rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
+                                    }
+                                >
+                                    <div className="flex flex-wrap items-center justify-between gap-3">
+                                        <span>{sessionSaveMessage}</span>
+                                        {sourceSessionId ? (
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                                                asChild
+                                            >
+                                                <Link href={`/sesje/${sourceSessionId}`}>Przejdź do sesji</Link>
+                                            </Button>
+                                        ) : null}
+                                    </div>
+                                </div>
+                            ) : null}
                             <div className="rounded-2xl overflow-hidden border border-white/10 shadow-2xl bg-black/50 aspect-[3/2] relative group">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
