@@ -306,12 +306,12 @@ function CustomGeneratorContent() {
                     <h1 className="text-4xl font-bold tracking-tight text-white drop-shadow-sm">
                         {isEditMode ? "Edycja pojedynczego zdjęcia" : "Generator pojedynczego zdjęcia"}
                     </h1>
-                    <p className="text-lg text-zinc-400 max-w-2xl mx-auto">
-                        {isEditMode
-                            ? <>Zaznacz maską fragment do zmiany i opisz, co ma zostać poprawione. Edycja działa na modelu <span className="text-blue-400 font-medium">Gemini 3.1 Flash</span>.</>
-                            : <>Opisz scenę i wygeneruj pojedyncze zdjęcie za pomocą modelu <span className="text-blue-400 font-medium">Gemini 3.1 Flash</span>.</>
-                        }
-                    </p>
+                        <p className="text-lg text-zinc-400 max-w-2xl mx-auto">
+                            {isEditMode
+                                ? <>Zaznacz maską fragment do zmiany i opisz, co ma zostać poprawione.</>
+                                : <>Opisz scenę i wygeneruj pojedyncze zdjęcie za pomocą modelu <span className="text-blue-400 font-medium">Gemini 3.1 Flash</span>.</>
+                            }
+                        </p>
                 </div>
 
                 <Card className="overflow-hidden border-white/10 bg-white/5 backdrop-blur-xl shadow-2xl relative">
