@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { normalizeRequestedCount } from "@/lib/requested-count";
+import { toUserFacingWorkerError } from "@/lib/worker-error";
 
 type GenerateRequestBody = {
     sessionId: string;
@@ -68,7 +69,16 @@ export async function POST(req: NextRequest) {
         if (!workerResp.ok) {
             const err = await workerResp.text();
             console.error("Worker error:", err);
-            return NextResponse.json({ error: `Worker failed: ${err.substring(0, 200)}` }, { status: workerResp.status });
+            return NextResponse.json(
+                {
+                    error: toUserFacingWorkerError(
+                        err,
+                        "Nie udało się uruchomić generowania. Spróbuj ponownie za chwilę.",
+                        workerResp.status
+                    ),
+                },
+                { status: workerResp.status }
+            );
         }
 
         const result = await workerResp.json() as { instanceId: string; status: string };
