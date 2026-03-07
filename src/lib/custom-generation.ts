@@ -1,0 +1,1 @@
+export const CUSTOM_GENERATION_COST = 10;

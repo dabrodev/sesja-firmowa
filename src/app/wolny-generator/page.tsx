@@ -13,6 +13,8 @@ import { useAuth } from "@/components/auth-provider";
 import { PhotoAsset } from "@/lib/store";
 import { AppHeader } from "@/components/app-header";
 import { sessionService } from "@/lib/sessions";
+import { CUSTOM_GENERATION_COST } from "@/lib/custom-generation";
+import { userService } from "@/lib/users";
 
 function CustomGeneratorContent() {
     const { user, userProfile, loading, logout } = useAuth();
@@ -41,6 +43,9 @@ function CustomGeneratorContent() {
     const editImageKey = useMemo(() => searchParams.get("editKey")?.trim() ?? "", [searchParams]);
     const sourceSessionId = useMemo(() => searchParams.get("sessionId")?.trim() ?? "", [searchParams]);
     const isEditMode = editImageUrl.length > 0 || editImageKey.length > 0;
+    const availableCredits = userProfile?.credits ?? 0;
+    const missingCredits = Math.max(0, CUSTOM_GENERATION_COST - availableCredits);
+    const hasEnoughCredits = availableCredits >= CUSTOM_GENERATION_COST;
 
     const addAsset = (asset: PhotoAsset) => setAssets(prev => [...prev, asset]);
     const removeAsset = (id: string) => setAssets(prev => prev.filter(a => a.id !== id));
@@ -234,6 +239,14 @@ function CustomGeneratorContent() {
 
     const handleGenerate = async () => {
         if (!prompt.trim()) return;
+        if (!user) {
+            setError("Zaloguj się, aby wygenerować zdjęcie.");
+            return;
+        }
+        if (!hasEnoughCredits) {
+            setError(`Brakuje ${missingCredits} PKT, aby wygenerować zdjęcie.`);
+            return;
+        }
 
         let maskDataUrl: string | undefined;
         if (isEditMode) {
@@ -255,7 +268,11 @@ function CustomGeneratorContent() {
         setSessionSaveStatus("idle");
         setSessionSaveMessage(null);
 
+        let didChargeCredits = false;
         try {
+            await userService.chargeCredits(user.uid, CUSTOM_GENERATION_COST);
+            didChargeCredits = true;
+
             const res = await fetch("/api/generate-custom", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -289,7 +306,19 @@ function CustomGeneratorContent() {
             }
         } catch (err: unknown) {
             console.error("Failed to generate custom image:", err);
-            setError(err instanceof Error ? err.message : "Błąd generowania");
+            let message = err instanceof Error ? err.message : "Błąd generowania";
+
+            if (didChargeCredits) {
+                try {
+                    await userService.refundCredits(user.uid, CUSTOM_GENERATION_COST);
+                    message = `${message} Punkty zostały automatycznie zwrócone.`;
+                } catch (refundError) {
+                    console.error("Failed to refund credits after custom generation error:", refundError);
+                    message = `${message} Nie udało się automatycznie zwrócić ${CUSTOM_GENERATION_COST} PKT.`;
+                }
+            }
+
+            setError(message);
         } finally {
             setIsGenerating(false);
         }
@@ -429,7 +458,7 @@ function CustomGeneratorContent() {
 
                         <div className="flex justify-between items-center pt-2">
                             <div className="text-xs text-zinc-500">
-                                Koszt: <span className="text-zinc-300 font-medium">0 PKT</span> (Wersja Beta)
+                                Koszt: <span className="text-zinc-300 font-medium">{CUSTOM_GENERATION_COST} PKT</span>
                             </div>
                             <Button
                                 size="lg"
@@ -437,7 +466,8 @@ function CustomGeneratorContent() {
                                 disabled={
                                     !prompt.trim() ||
                                     isGenerating ||
-                                    (isEditMode && (!maskReady || !hasMask || !resolvedEditImageUrl))
+                                    (isEditMode && (!maskReady || !hasMask || !resolvedEditImageUrl)) ||
+                                    !hasEnoughCredits
                                 }
                                 onClick={handleGenerate}
                             >
@@ -454,6 +484,12 @@ function CustomGeneratorContent() {
                                 )}
                             </Button>
                         </div>
+
+                        {!hasEnoughCredits ? (
+                            <div className="text-right text-xs text-red-200">
+                                Brakuje {missingCredits} PKT, aby uruchomić tę generację.
+                            </div>
+                        ) : null}
 
                         {error && (
                             <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">

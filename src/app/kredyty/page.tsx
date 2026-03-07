@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Coins, Loader2 } from "lucide-react";
 import { AppHeader } from "@/components/app-header";
+import { CUSTOM_GENERATION_COST } from "@/lib/custom-generation";
 
 const CREDIT_PACKS = [
     { name: "Starter", credits: 300 },
@@ -80,7 +81,7 @@ export default function CreditsPage() {
                         wolnego generatora
                     </Link>
                     {" "}
-                    (0 PKT).
+                    ({CUSTOM_GENERATION_COST} PKT za obraz).
                 </div>
             </main>
         </div>

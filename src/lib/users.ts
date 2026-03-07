@@ -4,6 +4,7 @@ import {
     setDoc,
     updateDoc,
     onSnapshot,
+    runTransaction,
     type FieldValue,
     Timestamp,
 } from "firebase/firestore";
@@ -81,6 +82,62 @@ export const userService = {
             }
         } catch (error) {
             console.error("Error deducting credits:", error);
+            throw error;
+        }
+    },
+
+    async chargeCredits(uid: string, amount: number): Promise<void> {
+        const safeAmount = Math.max(0, Math.round(amount));
+        if (safeAmount <= 0) return;
+
+        try {
+            await runTransaction(db, async (transaction) => {
+                const docRef = doc(db, "users", uid);
+                const docSnap = await transaction.get(docRef);
+                if (!docSnap.exists()) {
+                    throw new Error("Nie znaleziono profilu użytkownika.");
+                }
+
+                const profile = docSnap.data() as UserProfile;
+                const currentCredits =
+                    typeof profile.credits === "number" && Number.isFinite(profile.credits)
+                        ? Math.max(0, Math.round(profile.credits))
+                        : 0;
+
+                if (currentCredits < safeAmount) {
+                    throw new Error(`Brakuje ${safeAmount - currentCredits} PKT, aby wykonać tę operację.`);
+                }
+
+                transaction.set(docRef, { credits: currentCredits - safeAmount }, { merge: true });
+            });
+        } catch (error) {
+            console.error("Error charging credits:", error);
+            throw error;
+        }
+    },
+
+    async refundCredits(uid: string, amount: number): Promise<void> {
+        const safeAmount = Math.max(0, Math.round(amount));
+        if (safeAmount <= 0) return;
+
+        try {
+            await runTransaction(db, async (transaction) => {
+                const docRef = doc(db, "users", uid);
+                const docSnap = await transaction.get(docRef);
+                if (!docSnap.exists()) {
+                    throw new Error("Nie znaleziono profilu użytkownika.");
+                }
+
+                const profile = docSnap.data() as UserProfile;
+                const currentCredits =
+                    typeof profile.credits === "number" && Number.isFinite(profile.credits)
+                        ? Math.max(0, Math.round(profile.credits))
+                        : 0;
+
+                transaction.set(docRef, { credits: currentCredits + safeAmount }, { merge: true });
+            });
+        } catch (error) {
+            console.error("Error refunding credits:", error);
             throw error;
         }
     },
