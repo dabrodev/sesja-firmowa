@@ -577,6 +577,7 @@ export const sessionService = {
                         faceReferences: arrayRemove(...uniqueReferences),
                         officeReferences: arrayRemove(...uniqueReferences),
                         outfitReferences: arrayRemove(...uniqueReferences),
+                        results: arrayRemove(...uniqueReferences),
                         updatedAt: serverTimestamp(),
                     });
                 })

@@ -5,7 +5,6 @@ import { useAuth } from "@/components/auth-provider";
 import { assetService, UserAsset } from "@/lib/assets";
 import { AssetType, useAppStore } from "@/lib/store";
 import { Loader2, Trash2, Images, CheckSquare, Square } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ImageWithPlaceholder } from "@/components/image-with-placeholder";
@@ -19,12 +18,14 @@ const FILTER_LABELS: Record<AssetFilter, string> = {
     face: "Wizerunek",
     office: "Biuro",
     outfit: "Ubiór",
+    generated: "Wygenerowane",
 };
 
 const TYPE_LABELS: Record<AssetType, string> = {
     face: "Wizerunek",
     office: "Biuro",
     outfit: "Ubiór",
+    generated: "Wygenerowane",
 };
 
 export default function MaterialsPage() {
@@ -141,7 +142,7 @@ export default function MaterialsPage() {
                         removeFaceReference(asset.id);
                     } else if (asset.type === "office") {
                         removeOfficeReference(asset.id);
-                    } else {
+                    } else if (asset.type === "outfit") {
                         removeOutfitReference(asset.id);
                     }
                 }
@@ -192,7 +193,7 @@ export default function MaterialsPage() {
                     <div>
                         <h1 className="text-4xl font-bold tracking-tight">Moje Materiały</h1>
                         <p className="mt-2 text-zinc-400">
-                            Tu widzisz wszystkie wgrane zdjęcia i decydujesz, które usunąć.
+                            Tu widzisz wszystkie wgrane i wygenerowane zdjęcia oraz decydujesz, które usunąć.
                         </p>
                     </div>
                     <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-300">
@@ -245,7 +246,7 @@ export default function MaterialsPage() {
                         <Images className="mx-auto mb-4 h-10 w-10 text-zinc-500" />
                         <h2 className="text-xl font-semibold text-white">Brak zdjęć w tym widoku</h2>
                         <p className="mt-2 text-zinc-400">
-                            Wgraj zdjęcia w generatorze, a tutaj pojawią się do dalszego zarządzania.
+                            Wgraj materiały albo wygeneruj obraz, a tutaj pojawią się do dalszego zarządzania.
                         </p>
                     </div>
                 ) : (

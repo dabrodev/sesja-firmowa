@@ -35,7 +35,14 @@ export function AssetGalleryModal({
         new Set(currentSelected.map(a => a.id))
     );
 
-    const assetLabel = type === "face" ? "twarzy" : type === "office" ? "biura" : "ubioru";
+    const assetLabel =
+        type === "face"
+            ? "twarzy"
+            : type === "office"
+                ? "biura"
+                : type === "outfit"
+                    ? "ubioru"
+                    : "wygenerowanych";
 
     const loadAssets = useCallback(async () => {
         setIsLoading(true);

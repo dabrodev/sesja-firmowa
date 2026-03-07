@@ -9,7 +9,7 @@ export interface PhotoAsset {
     size: number;
 }
 
-export type AssetType = "face" | "office" | "outfit";
+export type AssetType = "face" | "office" | "outfit" | "generated";
 
 export interface Persona {
     id: string;

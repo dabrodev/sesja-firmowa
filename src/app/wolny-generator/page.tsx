@@ -16,6 +16,7 @@ import { sessionService } from "@/lib/sessions";
 import { CUSTOM_GENERATION_COST } from "@/lib/custom-generation";
 import { userService } from "@/lib/users";
 import { extractR2KeyFromReference } from "@/lib/reference-assets";
+import { assetService } from "@/lib/assets";
 
 function CustomGeneratorContent() {
     const { user, userProfile, loading, logout } = useAuth();
@@ -35,6 +36,8 @@ function CustomGeneratorContent() {
     const [maskReady, setMaskReady] = useState(false);
     const [sessionSaveStatus, setSessionSaveStatus] = useState<"idle" | "saved" | "failed">("idle");
     const [sessionSaveMessage, setSessionSaveMessage] = useState<string | null>(null);
+    const [materialSaveStatus, setMaterialSaveStatus] = useState<"idle" | "saved" | "failed">("idle");
+    const [materialSaveMessage, setMaterialSaveMessage] = useState<string | null>(null);
 
     const baseImageRef = useRef<HTMLImageElement | null>(null);
     const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -307,6 +310,8 @@ function CustomGeneratorContent() {
         setResultUrl(null);
         setSessionSaveStatus("idle");
         setSessionSaveMessage(null);
+        setMaterialSaveStatus("idle");
+        setMaterialSaveMessage(null);
 
         let didChargeCredits = false;
         let effectiveSourceSessionId = resolvedSourceSessionId;
@@ -340,6 +345,29 @@ function CustomGeneratorContent() {
 
             const data = await res.json() as { url: string };
             setResultUrl(data.url);
+
+            try {
+                const assetKey = extractR2KeyFromReference(data.url) ?? data.url;
+                const assetName = assetKey.split("/").pop() || "generated-image.jpg";
+
+                await assetService.saveAsset(
+                    user.uid,
+                    {
+                        id: assetKey,
+                        url: data.url,
+                        name: assetName,
+                        size: 0,
+                    },
+                    "generated"
+                );
+
+                setMaterialSaveStatus("saved");
+                setMaterialSaveMessage("Zdjęcie zostało zapisane w materiałach.");
+            } catch (materialError) {
+                console.error("Failed to save generated image to materials:", materialError);
+                setMaterialSaveStatus("failed");
+                setMaterialSaveMessage("Zdjęcie wygenerowano, ale nie udało się zapisać go w materiałach.");
+            }
 
             if (isEditMode && effectiveSourceSessionId) {
                 try {
@@ -389,7 +417,7 @@ function CustomGeneratorContent() {
                         <p className="text-lg text-zinc-400 max-w-2xl mx-auto">
                             {isEditMode
                                 ? <>Zaznacz maską fragment do zmiany i opisz, co ma zostać poprawione.</>
-                                : <>Opisz scenę i wygeneruj pojedyncze zdjęcie za pomocą modelu <span className="text-blue-400 font-medium">Gemini 3.1 Flash</span>.</>
+                                : <>Opisz scenę i wygeneruj pojedyncze zdjęcie.</>
                             }
                         </p>
                 </div>
@@ -562,6 +590,27 @@ function CustomGeneratorContent() {
                                 <ImageIcon className="h-5 w-5 text-blue-400" />
                                 {isEditMode ? "Wynik Edycji" : "Wynik Generowania"}
                             </h3>
+                            {materialSaveMessage ? (
+                                <div
+                                    className={
+                                        materialSaveStatus === "saved"
+                                            ? "rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100"
+                                            : "rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
+                                    }
+                                >
+                                    <div className="flex flex-wrap items-center justify-between gap-3">
+                                        <span>{materialSaveMessage}</span>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                                            asChild
+                                        >
+                                            <Link href="/materialy">Przejdź do materiałów</Link>
+                                        </Button>
+                                    </div>
+                                </div>
+                            ) : null}
                             {sessionSaveMessage ? (
                                 <div
                                     className={

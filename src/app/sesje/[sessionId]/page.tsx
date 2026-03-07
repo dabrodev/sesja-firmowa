@@ -646,13 +646,16 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
             return;
         }
 
-        const confirmed = confirm("Usunąć to zdjęcie z sesji? Plik zostanie usunięty również z Cloudflare R2.");
+        const confirmed = confirm("Usunąć to zdjęcie z sesji? Plik zostanie usunięty z Cloudflare R2 tylko jeśli nie jest zapisany w materiałach.");
         if (!confirmed) return;
 
         const targetUrl = session.results[index];
         setDeletingResultIndex(index);
         try {
-            await deleteR2ByReference(targetUrl);
+            const isSavedInMaterials = user ? await assetService.hasUserAssetReference(user.uid, targetUrl) : false;
+            if (!isSavedInMaterials) {
+                await deleteR2ByReference(targetUrl);
+            }
             const nextResults = session.results.filter((_, resultIndex) => resultIndex !== index);
             await sessionService.updateSession(session.id, { results: nextResults });
             setSession((prev) => (prev ? { ...prev, results: nextResults } : prev));
@@ -671,14 +674,17 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
             return;
         }
 
-        const confirmed = confirm("Usunąć całą sesję? Wszystkie wygenerowane zdjęcia zostaną usunięte także z Cloudflare R2.");
+        const confirmed = confirm("Usunąć całą sesję? Zdjęcia niezapisane w materiałach zostaną usunięte także z Cloudflare R2.");
         if (!confirmed) return;
 
         setIsDeletingSession(true);
         try {
             for (const url of session.results) {
                 try {
-                    await deleteR2ByReference(url);
+                    const isSavedInMaterials = user ? await assetService.hasUserAssetReference(user.uid, url) : false;
+                    if (!isSavedInMaterials) {
+                        await deleteR2ByReference(url);
+                    }
                 } catch (error) {
                     console.warn("Failed to delete result from R2:", error);
                 }

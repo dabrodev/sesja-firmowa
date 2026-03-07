@@ -66,7 +66,13 @@ export const assetService = {
                     name: typeof data.name === "string" ? data.name : "asset",
                     size: typeof data.size === "number" ? data.size : 0,
                     userId: typeof data.userId === "string" ? data.userId : userId,
-                    type: data.type === "face" || data.type === "office" || data.type === "outfit" ? data.type : type,
+                    type:
+                        data.type === "face" ||
+                        data.type === "office" ||
+                        data.type === "outfit" ||
+                        data.type === "generated"
+                            ? data.type
+                            : type,
                     createdAt: data.createdAt instanceof Timestamp ? data.createdAt : Timestamp.fromMillis(0),
                 } as UserAsset;
             });
@@ -83,17 +89,47 @@ export const assetService = {
     },
 
     async getAllUserAssets(userId: string): Promise<UserAsset[]> {
-        const [faceAssets, officeAssets, outfitAssets] = await Promise.all([
+        const [faceAssets, officeAssets, outfitAssets, generatedAssets] = await Promise.all([
             this.getUserAssets(userId, "face"),
             this.getUserAssets(userId, "office"),
             this.getUserAssets(userId, "outfit"),
+            this.getUserAssets(userId, "generated"),
         ]);
 
-        return [...faceAssets, ...officeAssets, ...outfitAssets].sort((a, b) => {
+        return [...faceAssets, ...officeAssets, ...outfitAssets, ...generatedAssets].sort((a, b) => {
             const timeA = a.createdAt?.toMillis() || 0;
             const timeB = b.createdAt?.toMillis() || 0;
             return timeB - timeA;
         });
+    },
+
+    async hasUserAssetReference(userId: string, assetReference: string): Promise<boolean> {
+        try {
+            const key = extractR2KeyFromReference(assetReference);
+
+            if (key) {
+                const keyQuery = query(
+                    collection(db, "user_assets"),
+                    where("userId", "==", userId),
+                    where("id", "==", key)
+                );
+                const keySnapshot = await getDocs(keyQuery);
+                if (!keySnapshot.empty) {
+                    return true;
+                }
+            }
+
+            const referenceQuery = query(
+                collection(db, "user_assets"),
+                where("userId", "==", userId),
+                where("url", "==", assetReference)
+            );
+            const referenceSnapshot = await getDocs(referenceQuery);
+            return !referenceSnapshot.empty;
+        } catch (error) {
+            console.error("Error checking user asset reference:", error);
+            throw error;
+        }
     },
 
     async deleteAsset(docId: string, assetReference?: string) {
