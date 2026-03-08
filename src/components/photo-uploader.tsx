@@ -20,6 +20,7 @@ interface PhotoUploaderProps {
     maxFiles?: number;
     userId: string;
     assetType: AssetType;
+    galleryTypes?: AssetType[];
 }
 
 export function PhotoUploader({
@@ -31,9 +32,11 @@ export function PhotoUploader({
     maxFiles = 5,
     userId,
     assetType,
+    galleryTypes,
 }: PhotoUploaderProps) {
     const [isUploading, setIsUploading] = useState(false);
     const [isGalleryOpen, setIsGalleryOpen] = useState(false);
+    const galleryButtonLabel = galleryTypes?.includes("generated") ? "Wybierz z materiałów" : "Wybierz z galerii";
 
     const onDrop = useCallback(
         async (acceptedFiles: File[]) => {
@@ -121,7 +124,7 @@ export function PhotoUploader({
                         className="bg-blue-500/10 border-blue-500/20 text-blue-400 hover:bg-blue-500/20 hidden sm:flex"
                         onClick={() => setIsGalleryOpen(true)}
                     >
-                        <ImagePlus className="mr-2 h-4 w-4" /> Wybierz z galerii
+                        <ImagePlus className="mr-2 h-4 w-4" /> {galleryButtonLabel}
                     </Button>
                 </div>
             </div>
@@ -132,7 +135,7 @@ export function PhotoUploader({
                 className="w-full sm:hidden bg-blue-500/10 border-blue-500/20 text-blue-400 hover:bg-blue-500/20"
                 onClick={() => setIsGalleryOpen(true)}
             >
-                <ImagePlus className="mr-2 h-4 w-4" /> Wybierz z wgranych zdjęć
+                <ImagePlus className="mr-2 h-4 w-4" /> {galleryButtonLabel}
             </Button>
 
             <div
@@ -194,6 +197,7 @@ export function PhotoUploader({
                 onClose={() => setIsGalleryOpen(false)}
                 userId={userId}
                 type={assetType}
+                types={galleryTypes}
                 onSelect={handleGallerySelect}
                 maxSelectable={maxFiles}
                 currentSelected={assets}

@@ -8,6 +8,7 @@ import {
     doc,
     serverTimestamp,
     Timestamp,
+    updateDoc,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { AssetType, PhotoAsset } from "./store";
@@ -18,10 +19,15 @@ export interface UserAsset extends PhotoAsset {
     userId: string;
     type: AssetType;
     createdAt: Timestamp;
+    generationPrompt?: string;
+}
+
+interface SaveAssetOptions {
+    generationPrompt?: string;
 }
 
 export const assetService = {
-    async saveAsset(userId: string, asset: PhotoAsset, type: AssetType) {
+    async saveAsset(userId: string, asset: PhotoAsset, type: AssetType, options?: SaveAssetOptions) {
         try {
             // Check if asset with this ID already exists for this user
             const q = query(
@@ -32,13 +38,23 @@ export const assetService = {
             const snapshot = await getDocs(q);
 
             if (!snapshot.empty) {
-                return snapshot.docs[0].id; // Already saved
+                const existingDoc = snapshot.docs[0];
+                if (
+                    options?.generationPrompt &&
+                    typeof existingDoc.data().generationPrompt !== "string"
+                ) {
+                    await updateDoc(existingDoc.ref, {
+                        generationPrompt: options.generationPrompt,
+                    });
+                }
+                return existingDoc.id; // Already saved
             }
 
             const docRef = await addDoc(collection(db, "user_assets"), {
                 ...asset,
                 userId,
                 type,
+                ...(options?.generationPrompt ? { generationPrompt: options.generationPrompt } : {}),
                 createdAt: serverTimestamp(),
             });
             return docRef.id;
@@ -74,6 +90,10 @@ export const assetService = {
                             ? data.type
                             : type,
                     createdAt: data.createdAt instanceof Timestamp ? data.createdAt : Timestamp.fromMillis(0),
+                    generationPrompt:
+                        typeof data.generationPrompt === "string" && data.generationPrompt.trim().length > 0
+                            ? data.generationPrompt
+                            : undefined,
                 } as UserAsset;
             });
 

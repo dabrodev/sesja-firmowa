@@ -17,6 +17,7 @@ import { CUSTOM_GENERATION_COST } from "@/lib/custom-generation";
 import { userService } from "@/lib/users";
 import { extractR2KeyFromReference } from "@/lib/reference-assets";
 import { assetService } from "@/lib/assets";
+import { consumeCustomGeneratorDraft } from "@/lib/custom-generator-draft";
 
 function CustomGeneratorContent() {
     const { user, userProfile, loading, logout } = useAuth();
@@ -38,6 +39,7 @@ function CustomGeneratorContent() {
     const [sessionSaveMessage, setSessionSaveMessage] = useState<string | null>(null);
     const [materialSaveStatus, setMaterialSaveStatus] = useState<"idle" | "saved" | "failed">("idle");
     const [materialSaveMessage, setMaterialSaveMessage] = useState<string | null>(null);
+    const [restoredDraftMessage, setRestoredDraftMessage] = useState<string | null>(null);
 
     const baseImageRef = useRef<HTMLImageElement | null>(null);
     const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -246,6 +248,34 @@ function CustomGeneratorContent() {
         setResolvedSourceSessionId(sourceSessionId);
     }, [sourceSessionId]);
 
+    useEffect(() => {
+        if (isEditMode) return;
+
+        const draft = consumeCustomGeneratorDraft();
+        if (!draft) return;
+
+        if (draft.prompt) {
+            setPrompt(draft.prompt);
+        }
+
+        if (draft.referenceAsset) {
+            setAssets((prev) => {
+                if (prev.some((asset) => asset.id === draft.referenceAsset?.id)) {
+                    return prev;
+                }
+                return [draft.referenceAsset, ...prev].slice(0, 5);
+            });
+        }
+
+        if (draft.prompt && draft.referenceAsset) {
+            setRestoredDraftMessage("Załadowaliśmy zapisany prompt i dodaliśmy to zdjęcie jako referencję.");
+        } else if (draft.referenceAsset) {
+            setRestoredDraftMessage("Dodaliśmy wybrane zdjęcie jako referencję.");
+        } else if (draft.prompt) {
+            setRestoredDraftMessage("Załadowaliśmy zapisany prompt.");
+        }
+    }, [isEditMode]);
+
     const resolveSourceSessionId = useCallback(async (): Promise<string> => {
         if (sourceSessionId) {
             return sourceSessionId;
@@ -358,7 +388,8 @@ function CustomGeneratorContent() {
                         name: assetName,
                         size: 0,
                     },
-                    "generated"
+                    "generated",
+                    { generationPrompt: prompt.trim() }
                 );
 
                 setMaterialSaveStatus("saved");
@@ -436,7 +467,13 @@ function CustomGeneratorContent() {
                                 maxFiles={5}
                                 userId={userId}
                                 assetType="face"
+                                galleryTypes={["face", "generated"]}
                             />
+                            {restoredDraftMessage ? (
+                                <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 px-4 py-3 text-sm text-blue-100">
+                                    {restoredDraftMessage}
+                                </div>
+                            ) : null}
                         </div>
 
                         {isEditMode && (

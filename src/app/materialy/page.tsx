@@ -4,12 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { assetService, UserAsset } from "@/lib/assets";
 import { AssetType, useAppStore } from "@/lib/store";
-import { Loader2, Trash2, Images, CheckSquare, Square } from "lucide-react";
+import { Loader2, Trash2, Images, CheckSquare, Square, FileText, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ImageWithPlaceholder } from "@/components/image-with-placeholder";
 import { sessionService } from "@/lib/sessions";
 import { AppHeader } from "@/components/app-header";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { saveCustomGeneratorDraft } from "@/lib/custom-generator-draft";
 
 type AssetFilter = "all" | AssetType;
 
@@ -37,6 +39,7 @@ export default function MaterialsPage() {
     const [isDeleting, setIsDeleting] = useState(false);
     const [activeFilter, setActiveFilter] = useState<AssetFilter>("all");
     const [selectedDocIds, setSelectedDocIds] = useState<Set<string>>(new Set());
+    const [promptPreviewAsset, setPromptPreviewAsset] = useState<UserAsset | null>(null);
 
     const fetchAssets = useCallback(async () => {
         if (!user) return;
@@ -174,6 +177,20 @@ export default function MaterialsPage() {
         await deleteAssets([asset]);
     };
 
+    const handleUseAsReference = (asset: UserAsset) => {
+        saveCustomGeneratorDraft({
+            prompt: asset.generationPrompt ?? "",
+            referenceAsset: {
+                id: asset.id,
+                url: asset.url,
+                name: asset.name,
+                size: asset.size,
+            },
+        });
+
+        router.push("/wolny-generator");
+    };
+
     if (authLoading || loading) {
         return (
             <div className="flex min-h-screen items-center justify-center bg-[#020617]">
@@ -298,6 +315,30 @@ export default function MaterialsPage() {
                                             </span>
                                         </div>
                                         <p className="truncate text-xs text-zinc-400">{asset.name}</p>
+                                        {asset.type === "generated" ? (
+                                            <div className="flex items-center gap-2 pt-2">
+                                                <Button
+                                                    type="button"
+                                                    size="icon"
+                                                    variant="outline"
+                                                    className="h-8 w-8 border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 hover:text-white"
+                                                    onClick={() => setPromptPreviewAsset(asset)}
+                                                    title="Pokaż prompt"
+                                                >
+                                                    <FileText className="h-4 w-4" />
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="h-8 flex-1 border-blue-500/20 bg-blue-500/10 text-blue-100 hover:bg-blue-500/20 hover:text-white"
+                                                    onClick={() => handleUseAsReference(asset)}
+                                                >
+                                                    <Sparkles className="mr-2 h-4 w-4" />
+                                                    Użyj jako zdjęcie referencyjne
+                                                </Button>
+                                            </div>
+                                        ) : null}
                                     </div>
                                 </div>
                             );
@@ -305,6 +346,32 @@ export default function MaterialsPage() {
                     </div>
                 )}
             </main>
+
+            <Dialog open={Boolean(promptPreviewAsset)} onOpenChange={(open) => !open && setPromptPreviewAsset(null)}>
+                <DialogContent className="border-white/10 bg-[#020617] text-white sm:max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>Prompt tego zdjęcia</DialogTitle>
+                        <DialogDescription className="text-zinc-400">
+                            Możesz podejrzeć poprzedni prompt albo od razu użyć tego zdjęcia jako nowej referencji.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm leading-6 text-zinc-200 whitespace-pre-wrap">
+                        {promptPreviewAsset?.generationPrompt?.trim() || "Dla tego zdjęcia prompt nie został jeszcze zapisany."}
+                    </div>
+                    {promptPreviewAsset ? (
+                        <div className="flex justify-end">
+                            <Button
+                                type="button"
+                                className="bg-blue-600 text-white hover:bg-blue-500"
+                                onClick={() => handleUseAsReference(promptPreviewAsset)}
+                            >
+                                <Sparkles className="mr-2 h-4 w-4" />
+                                Użyj jako zdjęcie referencyjne
+                            </Button>
+                        </div>
+                    ) : null}
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

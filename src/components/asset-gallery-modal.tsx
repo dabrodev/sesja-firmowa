@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle2, Search, Trash2, Shield } from "lucide-react";
@@ -9,60 +9,91 @@ import { AssetType, PhotoAsset } from "@/lib/store";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { ImageWithPlaceholder } from "./image-with-placeholder";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface AssetGalleryModalProps {
     isOpen: boolean;
     onClose: () => void;
     userId: string;
     type: AssetType;
+    types?: AssetType[];
     onSelect: (assets: PhotoAsset[]) => void;
     maxSelectable?: number;
     currentSelected?: PhotoAsset[];
 }
+
+const ASSET_TYPE_LABELS: Record<AssetType, { plural: string; short: string }> = {
+    face: {
+        plural: "referencyjnych",
+        short: "Referencje",
+    },
+    office: {
+        plural: "biura",
+        short: "Biuro",
+    },
+    outfit: {
+        plural: "ubioru",
+        short: "Ubiór",
+    },
+    generated: {
+        plural: "wygenerowanych",
+        short: "Wygenerowane",
+    },
+};
 
 export function AssetGalleryModal({
     isOpen,
     onClose,
     userId,
     type,
+    types,
     onSelect,
     maxSelectable = 5,
     currentSelected = []
 }: AssetGalleryModalProps) {
-    const [assets, setAssets] = useState<UserAsset[]>([]);
+    const availableTypes = useMemo(() => (types?.length ? types : [type]), [type, types]);
+    const [assetsByType, setAssetsByType] = useState<Partial<Record<AssetType, UserAsset[]>>>({});
     const [isLoading, setIsLoading] = useState(true);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(
         new Set(currentSelected.map(a => a.id))
     );
+    const [activeType, setActiveType] = useState<AssetType>(availableTypes[0]);
 
-    const assetLabel =
-        type === "face"
-            ? "twarzy"
-            : type === "office"
-                ? "biura"
-                : type === "outfit"
-                    ? "ubioru"
-                    : "wygenerowanych";
+    const activeAssets = assetsByType[activeType] ?? [];
+    const allAssets = availableTypes.flatMap((assetType) => assetsByType[assetType] ?? []);
+    const activeLabel = ASSET_TYPE_LABELS[activeType];
 
     const loadAssets = useCallback(async () => {
         setIsLoading(true);
         try {
-            const data = await assetService.getUserAssets(userId, type);
-            setAssets(data);
+            const loadedAssets = await Promise.all(
+                availableTypes.map(async (assetType) => {
+                    const data = await assetService.getUserAssets(userId, assetType);
+                    return [assetType, data] as const;
+                })
+            );
+
+            setAssetsByType(
+                loadedAssets.reduce<Partial<Record<AssetType, UserAsset[]>>>((acc, [assetType, data]) => {
+                    acc[assetType] = data;
+                    return acc;
+                }, {})
+            );
         } catch (error) {
             console.error("Failed to load assets:", error);
         } finally {
             setIsLoading(false);
         }
-    }, [userId, type]);
+    }, [availableTypes, userId]);
 
     useEffect(() => {
         if (isOpen && userId) {
             void loadAssets();
             // Reset selection based on currently selected assets in parent component
             setSelectedIds(new Set(currentSelected.map(a => a.id)));
+            setActiveType(availableTypes[0]);
         }
-    }, [isOpen, userId, currentSelected, loadAssets]);
+    }, [availableTypes, currentSelected, isOpen, loadAssets, userId]);
 
     const toggleSelection = (assetId: string) => {
         const newSelected = new Set(selectedIds);
@@ -76,7 +107,7 @@ export function AssetGalleryModal({
     };
 
     const handleConfirm = () => {
-        const selectedAssets = assets.filter(a => selectedIds.has(a.id));
+        const selectedAssets = allAssets.filter(a => selectedIds.has(a.id));
         onSelect(selectedAssets);
         onClose();
     };
@@ -87,7 +118,10 @@ export function AssetGalleryModal({
 
         try {
             await assetService.deleteAsset(asset.docId, asset.url);
-            setAssets((prev) => prev.filter((item) => item.docId !== asset.docId));
+            setAssetsByType((prev) => ({
+                ...prev,
+                [activeType]: (prev[activeType] ?? []).filter((item) => item.docId !== asset.docId),
+            }));
 
             // Also remove from selection if it was selected
             if (selectedIds.has(asset.id)) {
@@ -111,26 +145,44 @@ export function AssetGalleryModal({
                             Wybierz z Galerii
                         </DialogTitle>
                         <DialogDescription className="text-zinc-400 text-base">
-                            Wybierz wcześniej wgrane zdjęcia {assetLabel},
-                            aby użyć ich w nowej sesji. Możesz zaznaczyć do {maxSelectable} plików.
+                            Wybierz zdjęcia z materiałów, aby użyć ich jako referencji. Możesz zaznaczyć do {maxSelectable} plików.
                         </DialogDescription>
                     </DialogHeader>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-6 custom-scrollbar bg-gradient-to-b from-transparent to-black/40">
+                    {availableTypes.length > 1 ? (
+                        <Tabs value={activeType} onValueChange={(value) => setActiveType(value as AssetType)}>
+                            <TabsList
+                                variant="line"
+                                className="mb-6 inline-flex rounded-full border border-white/10 bg-white/5 p-1"
+                            >
+                                {availableTypes.map((assetType) => (
+                                    <TabsTrigger
+                                        key={assetType}
+                                        value={assetType}
+                                        className="rounded-full px-4 py-1.5 text-sm text-zinc-300 data-[state=active]:bg-blue-500/15 data-[state=active]:text-white"
+                                    >
+                                        {ASSET_TYPE_LABELS[assetType].short}
+                                    </TabsTrigger>
+                                ))}
+                            </TabsList>
+                        </Tabs>
+                    ) : null}
+
                     {isLoading ? (
                         <div className="flex flex-col items-center justify-center h-full gap-4 text-zinc-400">
                             <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
                             <p>Wczytywanie Twojej galerii...</p>
                         </div>
-                    ) : assets.length === 0 ? (
+                    ) : activeAssets.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-full text-center space-y-4 max-w-md mx-auto">
                             <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center">
                                 <Search className="h-10 w-10 text-zinc-500" />
                             </div>
                             <h3 className="text-xl font-medium text-white">Galeria jest pusta</h3>
                             <p className="text-zinc-400">
-                                Nie masz jeszcze zapisanych zdjęć {assetLabel} w swojej chmurze. Zostaną one tu automatycznie dodane, gdy wgrasz je z komputera w generatorze.
+                                Nie masz jeszcze zapisanych zdjęć {activeLabel.plural} w swojej chmurze. Zostaną one tu automatycznie dodane, gdy wgrasz je z komputera w generatorze.
                             </p>
                             <Button variant="outline" onClick={onClose} className="mt-4 border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white">
                                 Wróć do wgrywania
@@ -150,7 +202,7 @@ export function AssetGalleryModal({
 
                             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
                                 <AnimatePresence>
-                                    {assets.map((asset) => {
+                                    {activeAssets.map((asset) => {
                                         const isSelected = selectedIds.has(asset.id);
                                         const disabled = !isSelected && selectedIds.size >= maxSelectable;
 
