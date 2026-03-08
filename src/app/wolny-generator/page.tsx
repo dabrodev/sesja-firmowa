@@ -259,11 +259,12 @@ function CustomGeneratorContent() {
         }
 
         if (draft.referenceAsset) {
+            const referenceAsset = draft.referenceAsset;
             setAssets((prev) => {
-                if (prev.some((asset) => asset.id === draft.referenceAsset?.id)) {
+                if (prev.some((asset) => asset.id === referenceAsset.id)) {
                     return prev;
                 }
-                return [draft.referenceAsset, ...prev].slice(0, 5);
+                return [referenceAsset, ...prev].slice(0, 5);
             });
         }
 
