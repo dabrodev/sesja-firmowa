@@ -80,7 +80,7 @@ export const BetaGuard = ({ children }: { children: React.ReactNode }) => {
                         </motion.div>
                         <h2 className="text-3xl font-bold text-white tracking-tight">Dostęp Beta</h2>
                         <p className="mt-3 text-zinc-400 text-sm leading-relaxed max-w-[280px] mx-auto">
-                            Wprowadź swój unikalny kod, aby odblokować kreator i otrzymać pakiet 900 kredytów.
+                            Wprowadź swój unikalny kod, aby odblokować kreator i otrzymać pakiet 500 kredytów.
                         </p>
                     </div>
 

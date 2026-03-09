@@ -40,6 +40,7 @@ export default function MaterialsPage() {
     const [activeFilter, setActiveFilter] = useState<AssetFilter>("all");
     const [selectedDocIds, setSelectedDocIds] = useState<Set<string>>(new Set());
     const [promptPreviewAsset, setPromptPreviewAsset] = useState<UserAsset | null>(null);
+    const [imagePreviewAsset, setImagePreviewAsset] = useState<UserAsset | null>(null);
 
     const fetchAssets = useCallback(async () => {
         if (!user) return;
@@ -296,14 +297,18 @@ export default function MaterialsPage() {
                                         <Trash2 className="h-4 w-4" />
                                     </button>
 
-                                    <a href={asset.url} target="_blank" rel="noopener noreferrer">
+                                    <button
+                                        type="button"
+                                        onClick={() => setImagePreviewAsset(asset)}
+                                        className="block w-full text-left"
+                                    >
                                         <ImageWithPlaceholder
                                             src={asset.url}
                                             alt={asset.name}
                                             className="aspect-square w-full object-cover transition-transform duration-500 group-hover:scale-105"
                                             fallbackLabel="Zdjęcie usunięte"
                                         />
-                                    </a>
+                                    </button>
 
                                     <div className="space-y-1 border-t border-white/10 bg-black/30 p-2">
                                         <div className="flex items-center justify-between gap-2 text-[11px]">
@@ -335,7 +340,7 @@ export default function MaterialsPage() {
                                                     onClick={() => handleUseAsReference(asset)}
                                                 >
                                                     <Sparkles className="mr-2 h-4 w-4" />
-                                                    Użyj jako zdjęcie referencyjne
+                                                    Użyj jako referencję
                                                 </Button>
                                             </div>
                                         ) : null}
@@ -347,12 +352,59 @@ export default function MaterialsPage() {
                 )}
             </main>
 
+            <Dialog open={Boolean(imagePreviewAsset)} onOpenChange={(open) => !open && setImagePreviewAsset(null)}>
+                <DialogContent className="border-white/10 bg-[#020617] text-white sm:max-w-5xl">
+                    {imagePreviewAsset ? (
+                        <div className="space-y-4">
+                            <DialogHeader>
+                                <DialogTitle>{imagePreviewAsset.name}</DialogTitle>
+                                <DialogDescription className="text-zinc-400">
+                                    {TYPE_LABELS[imagePreviewAsset.type]} • {imagePreviewAsset.createdAt?.toDate().toLocaleDateString("pl-PL")}
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/40">
+                                <ImageWithPlaceholder
+                                    src={imagePreviewAsset.url}
+                                    alt={imagePreviewAsset.name}
+                                    className="max-h-[75vh] w-full object-contain"
+                                    fallbackLabel="Zdjęcie usunięte"
+                                />
+                            </div>
+                            {imagePreviewAsset.type === "generated" ? (
+                                <div className="flex flex-wrap justify-end gap-3">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10 hover:text-white"
+                                        onClick={() => {
+                                            setImagePreviewAsset(null);
+                                            setPromptPreviewAsset(imagePreviewAsset);
+                                        }}
+                                    >
+                                        <FileText className="mr-2 h-4 w-4" />
+                                        Pokaż prompt
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        className="bg-blue-600 text-white hover:bg-blue-500"
+                                        onClick={() => handleUseAsReference(imagePreviewAsset)}
+                                    >
+                                        <Sparkles className="mr-2 h-4 w-4" />
+                                        Użyj jako referencja
+                                    </Button>
+                                </div>
+                            ) : null}
+                        </div>
+                    ) : null}
+                </DialogContent>
+            </Dialog>
+
             <Dialog open={Boolean(promptPreviewAsset)} onOpenChange={(open) => !open && setPromptPreviewAsset(null)}>
                 <DialogContent className="border-white/10 bg-[#020617] text-white sm:max-w-2xl">
                     <DialogHeader>
                         <DialogTitle>Prompt tego zdjęcia</DialogTitle>
                         <DialogDescription className="text-zinc-400">
-                            Możesz podejrzeć poprzedni prompt albo od razu użyć tego zdjęcia jako nowej referencji.
+                            Możesz podejrzeć poprzedni prompt albo od razu użyć tego zdjęcia jako referencji.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm leading-6 text-zinc-200 whitespace-pre-wrap">
@@ -366,7 +418,7 @@ export default function MaterialsPage() {
                                 onClick={() => handleUseAsReference(promptPreviewAsset)}
                             >
                                 <Sparkles className="mr-2 h-4 w-4" />
-                                Użyj jako zdjęcie referencyjne
+                                Użyj jako referencję
                             </Button>
                         </div>
                     ) : null}

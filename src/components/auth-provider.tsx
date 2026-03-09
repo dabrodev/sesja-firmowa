@@ -149,7 +149,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                     uid: user.uid,
                     email: user.email || "",
                     isBetaTester: true,
-                    credits: 900
+                    credits: 500
                 };
                 setUserProfile(optimisticProfile as UserProfile);
                 localStorage.setItem("user_profile_cache", JSON.stringify(optimisticProfile));

@@ -60,7 +60,7 @@ export const userService = {
                 // Standard await to ensure consistency, optimistic UI in AuthProvider handles speed
                 await setDoc(docRef, {
                     isBetaTester: true,
-                    credits: 900,
+                    credits: 500,
                 }, { merge: true });
                 return true;
             } catch (error) {
