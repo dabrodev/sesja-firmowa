@@ -249,6 +249,7 @@ export function SessionWizard({
                                     maxFiles={10}
                                     userId={user.uid}
                                     assetType="face"
+                                    galleryTypes={["face", "generated"]}
                                 />
                                 <div className="flex justify-end">
                                     <Button

@@ -1196,6 +1196,7 @@ export default function SessionDetailsPage({ params }: { params: Promise<{ sessi
                                             maxFiles={10}
                                             userId={user.uid}
                                             assetType="face"
+                                            galleryTypes={["face", "generated"]}
                                         />
 
                                         <div className="h-px bg-white/10 w-full" />
