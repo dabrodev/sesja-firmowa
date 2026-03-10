@@ -323,11 +323,7 @@ function CustomGeneratorContent() {
         }
 
         let maskDataUrl: string | undefined;
-        if (isEditMode) {
-            if (!maskReady || !hasMask) {
-                setError("Zaznacz czerwonym obszar, który chcesz zmienić.");
-                return;
-            }
+        if (isEditMode && hasMask) {
             const maskCanvas = maskCanvasRef.current;
             if (!maskCanvas) {
                 setError("Maska nie jest gotowa. Odśwież stronę i spróbuj ponownie.");
@@ -448,7 +444,7 @@ function CustomGeneratorContent() {
                     </h1>
                         <p className="text-lg text-zinc-400 max-w-2xl mx-auto">
                             {isEditMode
-                                ? <>Zaznacz maską fragment do zmiany i opisz, co ma zostać poprawione.</>
+                                ? <>Opcjonalnie zaznacz maską fragment do zmiany i opisz, co ma zostać poprawione.</>
                                 : <>Opisz scenę i wygeneruj pojedyncze zdjęcie.</>
                             }
                         </p>
@@ -480,11 +476,11 @@ function CustomGeneratorContent() {
                         {isEditMode && (
                             <div className="space-y-3">
                                 <label className="text-sm font-medium text-zinc-300 ml-1">
-                                    Obszar edycji (maska)
+                                    Obszar edycji (maska opcjonalna)
                                 </label>
                                 <div className="rounded-xl border border-white/10 bg-black/30 p-4 space-y-4">
                                     <p className="text-sm text-zinc-400">
-                                        Zamaluj na czerwono tylko ten fragment, który chcesz zmienić. Niezamalowana część zdjęcia powinna zostać zachowana.
+                                        Jeśli chcesz precyzyjnej podmiany, zamaluj na czerwono fragment do zmiany. Jeśli nic nie zaznaczysz, edycja zostanie wykonana na podstawie samego opisu.
                                     </p>
                                     <div className="rounded-xl overflow-hidden border border-white/10 bg-black/60 aspect-[5/4] relative">
                                         {resolvedEditImageUrl ? (
@@ -539,7 +535,7 @@ function CustomGeneratorContent() {
                                         </div>
                                         <div className="flex items-center gap-3">
                                             <span className={`text-xs ${hasMask ? "text-emerald-400" : "text-zinc-500"}`}>
-                                                {hasMask ? "Maska gotowa" : "Maska pusta"}
+                                                {hasMask ? "Maska gotowa" : "Brak maski"}
                                             </span>
                                             <Button
                                                 type="button"
@@ -583,7 +579,7 @@ function CustomGeneratorContent() {
                                 disabled={
                                     !prompt.trim() ||
                                     isGenerating ||
-                                    (isEditMode && (!maskReady || !hasMask || !resolvedEditImageUrl)) ||
+                                    (isEditMode && (!maskReady || !resolvedEditImageUrl)) ||
                                     !hasEnoughCredits
                                 }
                                 onClick={handleGenerate}

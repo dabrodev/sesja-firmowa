@@ -528,15 +528,10 @@ const workerHandler = {
                 const editImageKey = typeof body.editImageKey === "string" ? body.editImageKey.trim() : "";
                 const maskDataUrl = typeof body.maskDataUrl === "string" ? body.maskDataUrl.trim() : "";
                 const isEditRequest = editImageKey.length > 0 || editImageUrl.length > 0;
+                const hasMask = maskDataUrl.startsWith("data:image/");
 
                 if (!prompt) {
                     return new Response(JSON.stringify({ error: "Missing required field: prompt" }), {
-                        status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-                    });
-                }
-
-                if (isEditRequest && !maskDataUrl.startsWith("data:image/")) {
-                    return new Response(JSON.stringify({ error: "Missing required field: maskDataUrl for edit mode" }), {
                         status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
                     });
                 }
@@ -553,13 +548,6 @@ const workerHandler = {
                 const parts: GeminiPart[] = [];
 
                 if (isEditRequest) {
-                    const parsedMask = parseDataUrl(maskDataUrl);
-                    if (!parsedMask) {
-                        return new Response(JSON.stringify({ error: "Invalid maskDataUrl format" }), {
-                            status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-                        });
-                    }
-
                     let sourceImageKey = editImageKey;
                     if (!sourceImageKey && editImageUrl) {
                         const extractedKey = extractWorkerFileKey(editImageUrl);
@@ -586,15 +574,32 @@ const workerHandler = {
                         throw new Error("Edit source image was not found");
                     }
 
-                    parts.push({
-                        text: `EDIT MODE: Apply only the requested modification to the source image while preserving the original person identity, camera perspective, lighting, office scene, and realism.
+                    if (hasMask) {
+                        const parsedMask = parseDataUrl(maskDataUrl);
+                        if (!parsedMask) {
+                            return new Response(JSON.stringify({ error: "Invalid maskDataUrl format" }), {
+                                status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+                            });
+                        }
+
+                        parts.push({
+                            text: `EDIT MODE: Apply only the requested modification to the source image while preserving the original person identity, camera perspective, lighting, office scene, and realism.
 Only change pixels marked by the MASK IMAGE. Keep all unmasked areas unchanged.
 EDIT INSTRUCTION: ${prompt}`,
-                    });
-                    parts.push({ text: "SOURCE IMAGE (edit this image):" });
-                    parts.push({ inlineData: { mimeType: source.mimeType, data: source.base64 } });
-                    parts.push({ text: "MASK IMAGE (red/opaque painted area marks what can be changed; unpainted area must stay the same):" });
-                    parts.push({ inlineData: { mimeType: parsedMask.mimeType, data: parsedMask.base64 } });
+                        });
+                        parts.push({ text: "SOURCE IMAGE (edit this image):" });
+                        parts.push({ inlineData: { mimeType: source.mimeType, data: source.base64 } });
+                        parts.push({ text: "MASK IMAGE (red/opaque painted area marks what can be changed; unpainted area must stay the same):" });
+                        parts.push({ inlineData: { mimeType: parsedMask.mimeType, data: parsedMask.base64 } });
+                    } else {
+                        parts.push({
+                            text: `EDIT MODE: Apply the requested modification to the source image while preserving the original person identity, camera perspective, lighting, office scene, and realism.
+There is no mask for this request. Treat the whole image as editable context, but change only the smallest necessary area needed to satisfy the instruction.
+EDIT INSTRUCTION: ${prompt}`,
+                        });
+                        parts.push({ text: "SOURCE IMAGE (edit this image):" });
+                        parts.push({ inlineData: { mimeType: source.mimeType, data: source.base64 } });
+                    }
 
                     if (refImages.length > 0) {
                         parts.push({ text: `REFERENCE PHOTOS (${refImages.length} images):\nUse these as identity/style support while preserving the source image context.` });

@@ -26,11 +26,6 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "No prompt provided" }, { status: 400 });
         }
 
-        const hasEditTarget = editImageKey.length > 0 || editImageUrl.length > 0;
-        if (hasEditTarget && !maskDataUrl.startsWith("data:image/")) {
-            return NextResponse.json({ error: "Maska jest wymagana w trybie edycji." }, { status: 400 });
-        }
-
         const workerUrl = process.env.CLOUDFLARE_WORKER_URL;
         if (!workerUrl) {
             return NextResponse.json({ error: "Cloudflare Worker URL not configured" }, { status: 500 });
